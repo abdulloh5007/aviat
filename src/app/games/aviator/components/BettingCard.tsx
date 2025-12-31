@@ -14,6 +14,8 @@ interface BettingCardProps {
     onAdd?: () => void;
     showRemoveButton?: boolean;
     onRemove?: () => void;
+    userBalance?: number;
+    onInsufficientBalance?: () => void;
 }
 
 export default function BettingCard({
@@ -22,8 +24,29 @@ export default function BettingCard({
     isBetting, setIsBetting,
     formatAmount,
     showAddButton, onAdd,
-    showRemoveButton, onRemove
+    showRemoveButton, onRemove,
+    userBalance = 0,
+    onInsufficientBalance
 }: BettingCardProps) {
+
+    const handleBetClick = () => {
+        // If already betting, just cancel
+        if (isBetting) {
+            setIsBetting(false);
+            return;
+        }
+
+        // Check balance before placing bet
+        if (userBalance < betAmount) {
+            if (onInsufficientBalance) {
+                onInsufficientBalance();
+            }
+            return;
+        }
+
+        setIsBetting(true);
+    };
+
     return (
         <div className="bg-[#0e0e0e] rounded-xl p-2 max-w-2xl mx-auto border border-gray-800 relative">
 
@@ -96,7 +119,7 @@ export default function BettingCard({
                 {/* Right: Big Bet Button */}
                 <button
                     className={`flex flex-col items-center justify-center w-36 sm:w-48 bg-[#27b82c] hover:bg-[#2ed134] rounded-xl border-b-4 border-[#1e9122] active:border-b-0 active:translate-y-1 transition-all shadow-[0_0_20px_rgba(39,184,44,0.3)] ${isBetting ? 'bg-red-500 hover:bg-red-600 border-red-700 shadow-red-500/30' : ''}`}
-                    onClick={() => setIsBetting(!isBetting)}
+                    onClick={handleBetClick}
                 >
                     <span className="text-white font-medium text-lg leading-tight uppercase">
                         {isBetting ? 'Bekor qilish' : 'Pul tikish'}

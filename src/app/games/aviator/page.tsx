@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { Loader2, X, Shield, Copy, Check } from 'lucide-react';
 
 // Import local components
-import { GameHeader, HistoryBar, SideDrawer, BettingCard, ErrorModal, SuccessModal } from './components';
+import { GameHeader, HistoryBar, SideDrawer, BettingCard, WithdrawModal, ErrorModal, SuccessModal } from './components';
 
 // Import constants and types
 import {
@@ -666,6 +666,11 @@ export default function AviatorGamePage() {
                             formatAmount={formatAmount}
                             showAddButton={!showSecondBet}
                             onAdd={() => setShowSecondBet(true)}
+                            userBalance={userBalance}
+                            onInsufficientBalance={() => {
+                                setErrorMessage("Balansingiz yetarli emas! Iltimos, hisobingizni to'ldiring.");
+                                setShowErrorModal(true);
+                            }}
                         />
 
                         {showSecondBet && (
@@ -679,6 +684,11 @@ export default function AviatorGamePage() {
                                 formatAmount={formatAmount}
                                 showRemoveButton
                                 onRemove={() => setShowSecondBet(false)}
+                                userBalance={userBalance}
+                                onInsufficientBalance={() => {
+                                    setErrorMessage("Balansingiz yetarli emas! Iltimos, hisobingizni to'ldiring.");
+                                    setShowErrorModal(true);
+                                }}
                             />
                         )}
                     </div>
@@ -917,7 +927,26 @@ export default function AviatorGamePage() {
             )}
 
             {/* Error Modal */}
-            <ErrorModal isOpen={showErrorModal} message={errorMessage} onClose={() => setShowErrorModal(false)} />
+            <ErrorModal
+                isOpen={showErrorModal}
+                message={errorMessage}
+                onClose={() => setShowErrorModal(false)}
+                onDepositClick={() => {
+                    setIsDrawerOpen(true);
+                }}
+            />
+
+            {/* Withdraw Modal */}
+            <WithdrawModal
+                isOpen={isWithdrawModalOpen}
+                onClose={() => setIsWithdrawModalOpen(false)}
+                userBalance={userBalance}
+                onSuccess={() => setShowSuccessModal(true)}
+                onError={(msg) => {
+                    setErrorMessage(msg);
+                    setShowErrorModal(true);
+                }}
+            />
 
             {/* Success Modal */}
             <SuccessModal isOpen={showSuccessModal} onClose={closeSuccessModal} />

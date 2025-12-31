@@ -1,14 +1,15 @@
 'use client';
 
-import { X, Check } from 'lucide-react';
+import { X, Check, Wallet } from 'lucide-react';
 
 interface ErrorModalProps {
     isOpen: boolean;
     message: string;
     onClose: () => void;
+    onDepositClick?: () => void;
 }
 
-export function ErrorModal({ isOpen, message, onClose }: ErrorModalProps) {
+export function ErrorModal({ isOpen, message, onClose, onDepositClick }: ErrorModalProps) {
     if (!isOpen) return null;
 
     return (
@@ -21,12 +22,34 @@ export function ErrorModal({ isOpen, message, onClose }: ErrorModalProps) {
                     </div>
                     <h3 className="text-xl font-bold text-gray-800 mb-2">Xatolik</h3>
                     <p className="text-gray-500 mb-6">{message}</p>
-                    <button
-                        onClick={onClose}
-                        className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-full font-semibold transition-colors"
-                    >
-                        OK
-                    </button>
+
+                    {onDepositClick ? (
+                        <div className="space-y-2">
+                            <button
+                                onClick={() => {
+                                    onClose();
+                                    onDepositClick();
+                                }}
+                                className="w-full py-3 bg-[#27b82c] hover:bg-[#2ed134] text-white rounded-full font-semibold transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Wallet size={20} />
+                                Hisobni to'ldirish
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="w-full py-2 text-gray-500 hover:text-gray-700 font-medium transition-colors"
+                            >
+                                Yopish
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={onClose}
+                            className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-full font-semibold transition-colors"
+                        >
+                            OK
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
