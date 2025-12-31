@@ -17,18 +17,30 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
 
-        // Determine recommendation
+        // Determine recommendation based on target multiplier
         const isGoodBet = multiplier >= 1.50;
         const recommendation = isGoodBet
             ? "✅ *Tavsiya:* STAVKA QILING"
-            : "❌ *Tavsiya:* O'TKAZIB YUBORING";
+            : "⚠️ *Tavsiya:* KICHIK STAVKA yoki O'tkazib yuboring";
 
-        // Construct the message
-        const message = `🚀 *AVIATOR SIGNAL* 🚀
+        // Get signal strength
+        let signalStrength = "🔴 Past";
+        if (multiplier >= 10) signalStrength = "🟢 Juda Yuqori";
+        else if (multiplier >= 5) signalStrength = "🟢 Yuqori";
+        else if (multiplier >= 2) signalStrength = "🟡 O'rta";
+        else if (multiplier >= 1.5) signalStrength = "🟠 O'rtacha";
 
-🎯 *Kutilayotgan natija:* ${multiplier.toFixed(2)}x
+        // Construct the message for NEXT round
+        const message = `🛫 *KEYINGI RAUND SIGNALI* 🛫
+
+━━━━━━━━━━━━━━━━━━
+🎯 *Prognoz:* ${multiplier.toFixed(2)}x
+📊 *Signal kuchi:* ${signalStrength}
+━━━━━━━━━━━━━━━━━━
 
 ${recommendation}
+
+⏰ 5 sekund ichida boshlaydi!
 `;
 
         // Load the image

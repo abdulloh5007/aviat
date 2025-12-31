@@ -173,6 +173,22 @@ export default function AviatorGamePage() {
         loadUserProfile();
     }, [user]);
 
+    // Load multiplier history from database
+    useEffect(() => {
+        const loadHistory = async () => {
+            const { data } = await supabase
+                .from('game_rounds')
+                .select('multiplier')
+                .order('created_at', { ascending: false })
+                .limit(30);
+
+            if (data && data.length > 0) {
+                setMultiplierHistory(data.map(r => r.multiplier));
+            }
+        };
+        loadHistory();
+    }, []);
+
     // Payment timer countdown
     useEffect(() => {
         if (timeRemaining <= 0) return;
@@ -253,49 +269,135 @@ export default function AviatorGamePage() {
         );
     }, [gameState, currentMultiplier]);
 
-    // Connect to WebSocket server for game state updates
+    // Game Engine Mode Selection
     useEffect(() => {
-        // Dynamic import socket.io-client
-        import('socket.io-client').then(({ io }) => {
-            const wsUrl = process.env.NEXT_PUBLIC_GAME_WS_URL || 'http://localhost:3001';
-            const socket = io(wsUrl);
+        let isActive = true;
+        let countdownInterval: NodeJS.Timeout | null = null;
+        let flyInterval: NodeJS.Timeout | null = null;
+        let restartTimeout: NodeJS.Timeout | null = null;
 
-            socket.on('connect', () => {
-                console.log('🔌 Connected to game server');
-            });
+        // Generate multiplier
+        const generateMultiplier = () => {
+            const rand = Math.random() * 100;
+            if (rand < 3) return 1.00;
+            if (rand < 18) return 1.01 + Math.random() * 0.49;
+            if (rand < 43) return 1.5 + Math.random() * 0.5;
+            if (rand < 68) return 2 + Math.random() * 1;
+            if (rand < 83) return 3 + Math.random() * 2;
+            if (rand < 93) return 5 + Math.random() * 5;
+            if (rand < 98) return 10 + Math.random() * 40;
+            return 50 + Math.random() * 50;
+        };
 
-            socket.on('gameState', (state: {
-                game_state: 'waiting' | 'flying' | 'crashed';
-                current_multiplier: number;
-                target_multiplier: number;
-                countdown_seconds: number;
-                round_id: number;
-            }) => {
-                // Update game state
-                setGameState(state.game_state);
-                setCurrentMultiplier(state.current_multiplier);
-                setTargetMultiplier(state.target_multiplier);
-                setCountdownSeconds(state.countdown_seconds);
-                setCountdownProgress(state.countdown_seconds * 20);
+        // Import game config
+        import('@/lib/game-config').then(({ GAME_ENGINE_MODE, GAME_WS_URL }) => {
+            if (!isActive) return;
 
-                // When game crashes, save to local history
-                if (state.game_state === 'crashed') {
-                    if (lastSavedMultiplier.current !== state.target_multiplier) {
-                        lastSavedMultiplier.current = state.target_multiplier;
-                        setMultiplierHistory(h => [state.target_multiplier, ...h.slice(0, 29)]);
-                    }
-                }
-            });
+            if (GAME_ENGINE_MODE === 'machine') {
+                // MACHINE MODE: Connect to WebSocket server
+                import('socket.io-client').then(({ io }) => {
+                    if (!isActive) return;
+                    const socket = io(GAME_WS_URL);
 
-            socket.on('disconnect', () => {
-                console.log('❌ Disconnected from game server');
-            });
+                    socket.on('connect', () => {
+                        console.log('🔌 Connected to game server (machine mode)');
+                    });
 
-            // Cleanup on unmount
-            return () => {
-                socket.disconnect();
-            };
+                    socket.on('gameState', (state: {
+                        game_state: 'waiting' | 'flying' | 'crashed';
+                        current_multiplier: number;
+                        target_multiplier: number;
+                        countdown_seconds: number;
+                        round_id: number;
+                    }) => {
+                        if (!isActive) return;
+                        setGameState(state.game_state);
+                        setCurrentMultiplier(state.current_multiplier);
+                        setTargetMultiplier(state.target_multiplier);
+                        setCountdownSeconds(state.countdown_seconds);
+                        setCountdownProgress(state.countdown_seconds * 20);
+
+                        if (state.game_state === 'crashed') {
+                            if (lastSavedMultiplier.current !== state.target_multiplier) {
+                                lastSavedMultiplier.current = state.target_multiplier;
+                                setMultiplierHistory(h => [state.target_multiplier, ...h.slice(0, 29)]);
+                            }
+                        }
+                    });
+
+                    socket.on('disconnect', () => {
+                        console.log('❌ Disconnected from game server');
+                    });
+                });
+            } else {
+                // USER MODE: Simple client-side game loop
+                console.log('🎮 Game running in user mode');
+
+                let targetValue = parseFloat(generateMultiplier().toFixed(2));
+                setTargetMultiplier(targetValue);
+
+                const runGame = () => {
+                    if (!isActive) return;
+
+                    // Waiting phase
+                    setGameState('waiting');
+                    setCurrentMultiplier(1.00);
+                    let countdown = 5;
+                    setCountdownSeconds(countdown);
+                    setCountdownProgress(100);
+
+                    countdownInterval = setInterval(() => {
+                        if (!isActive) { clearInterval(countdownInterval!); return; }
+                        countdown--;
+                        setCountdownSeconds(countdown);
+                        setCountdownProgress(countdown * 20);
+
+                        if (countdown <= 0) {
+                            clearInterval(countdownInterval!);
+
+                            // Flying phase
+                            setGameState('flying');
+                            let mult = 1.00;
+
+                            flyInterval = setInterval(() => {
+                                if (!isActive) { clearInterval(flyInterval!); return; }
+                                mult += 0.01;
+                                if (mult >= targetValue) mult = targetValue;
+                                setCurrentMultiplier(parseFloat(mult.toFixed(2)));
+
+                                if (mult >= targetValue) {
+                                    clearInterval(flyInterval!);
+                                    setGameState('crashed');
+
+                                    if (lastSavedMultiplier.current !== targetValue) {
+                                        lastSavedMultiplier.current = targetValue;
+                                        setMultiplierHistory(h => [targetValue, ...h.slice(0, 29)]);
+                                        supabase.from('game_rounds').insert({ multiplier: targetValue });
+                                    }
+
+                                    restartTimeout = setTimeout(() => {
+                                        if (!isActive) return;
+                                        targetValue = parseFloat(generateMultiplier().toFixed(2));
+                                        setTargetMultiplier(targetValue);
+                                        runGame();
+                                    }, 3000);
+                                }
+                            }, 50);
+                        }
+                    }, 1000);
+                };
+
+                runGame();
+            }
         });
+
+        // Cleanup
+        return () => {
+            isActive = false;
+            if (countdownInterval) clearInterval(countdownInterval);
+            if (flyInterval) clearInterval(flyInterval);
+            if (restartTimeout) clearTimeout(restartTimeout);
+        };
     }, []);
 
     // Modal handlers
