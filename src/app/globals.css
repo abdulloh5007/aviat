@@ -1,0 +1,1065 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset and base styles - matching original Aviator */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  font-family: Inter, sans-serif;
+}
+
+/* Allow text selection and visible cursor in input fields */
+input,
+textarea,
+[contenteditable] {
+  caret-color: #1a1a4e;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+body {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+/* Main page container */
+.main-page-container {
+  width: 100%;
+  height: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(to bottom, #181818, #010101);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  min-height: 100vh;
+}
+
+.main-page-background {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1320px;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.main-page-big-plane {
+  position: absolute;
+  top: 105px;
+  left: -200px;
+}
+
+.main-page-phone-plane {
+  position: absolute;
+  top: 153px;
+  right: 0;
+}
+
+.main-page-bg-cloud-1 {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0.3;
+}
+
+.main-page-bg-cloud-2 {
+  position: absolute;
+  top: 23px;
+  left: 100px;
+  opacity: 0.3;
+}
+
+.aviator-plane-clouds {
+  position: absolute;
+  top: 582px;
+  right: -80px;
+  opacity: 0.5;
+}
+
+.main-page-bg-sun {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.main-page-bg-sun img {
+  position: absolute;
+  width: 200%;
+  height: auto;
+  top: 0;
+  left: -50%;
+  opacity: .3;
+  transform: translateY(-50%);
+}
+
+.z-index-2 {
+  z-index: 2;
+  position: relative;
+}
+
+.main-page-wrapper {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  height: 100%;
+  z-index: 2;
+  position: relative;
+  padding: 0 20px;
+}
+
+/* Header styles */
+.main-page-header-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #707070;
+  padding: 10px 0;
+}
+
+.main-page-logo {
+  padding-top: 10px;
+}
+
+.main-page-auth-wrapper {
+  display: flex;
+  padding: 15px 0 10px;
+  align-items: center;
+  gap: 15px;
+}
+
+.main-page-registration-wrapper {
+  /* No extra margin needed, using gap */
+}
+
+.login-button {
+  display: flex;
+  padding: 8px 15px;
+  border: 1px solid #FFFFFF;
+  border-radius: 20px;
+  background: none;
+  outline: none;
+  cursor: pointer;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.login-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.login-button:active {
+  transform: translateY(1px);
+}
+
+.login-button span {
+  color: #fff;
+  padding: 0 10px;
+  font-size: 16px;
+}
+
+.login-button img {
+  width: 22px;
+  height: 22px;
+}
+
+.registration-button {
+  display: flex;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 20px;
+  background-color: #27b82c;
+  outline: none;
+  cursor: pointer;
+  align-items: center;
+  transition: all 0.3s ease;
+  gap: 8px;
+}
+
+.registration-button:hover {
+  background-color: #2ed134;
+}
+
+.registration-button:active {
+  transform: translateY(1px);
+}
+
+.registration-button span {
+  font-size: 16px;
+  color: #fff;
+}
+
+.main-page-login-wrapper {
+  /* Handled by flex gap */
+}
+
+/* Content styles */
+.main-page-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.main-page-content-title {
+  display: flex;
+  justify-content: center;
+  padding-top: 50px;
+}
+
+.text-color-red {
+  color: #e50539;
+}
+
+.text-color-white {
+  color: #fff;
+}
+
+.font-size-42 {
+  font-size: 42px;
+}
+
+.font-size-35 {
+  font-size: 35px;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.jc-center {
+  justify-content: center;
+}
+
+.align-items-center {
+  align-items: center;
+}
+
+.flex-direction-column {
+  flex-direction: column;
+}
+
+.main-page-content-h2 {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
+}
+
+.main-page-content-h2 section {
+  max-width: 512px;
+  text-align: center;
+  padding: 0 15px;
+}
+
+.font-size-12 {
+  font-size: 12px;
+}
+
+.font-size-16 {
+  font-size: 16px;
+}
+
+.main-page-play-button {
+  display: flex;
+  padding: 12px 40px;
+  border-radius: 25px;
+  border: none;
+  background: none;
+  color: #fff;
+  font-weight: 700;
+  background-color: #27b82c;
+  cursor: pointer;
+  margin-top: 50px;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 30px rgba(39, 184, 44, 0.4);
+}
+
+.main-page-play-button:hover {
+  background-color: #2ed134;
+  box-shadow: 0 0 40px rgba(39, 184, 44, 0.6);
+}
+
+.main-page-play-button:active {
+  transform: translateY(1px);
+}
+
+.main-page-content-h3 {
+  width: 100%;
+  padding-top: 200px;
+  padding-left: 110px;
+}
+
+.font-size-22 {
+  font-size: 22px;
+}
+
+.text-color-crem {
+  color: #b5b4b4;
+}
+
+.font-size-14 {
+  font-size: 14px;
+}
+
+.width-650 {
+  width: 650px;
+}
+
+.padding-top-20 {
+  padding-top: 20px;
+}
+
+.main-page-key-features-list {
+  list-style: none;
+  line-height: 2;
+}
+
+/* How to play section */
+.main-page-how-to-play {
+  position: relative;
+  padding-top: 40px;
+  width: 100%;
+  height: auto;
+}
+
+.text-align-center {
+  text-align: center;
+}
+
+.font-size-18 {
+  font-size: 18px;
+}
+
+.font-size-28 {
+  font-size: 28px;
+}
+
+.padding-left-110 {
+  padding-left: 110px;
+}
+
+.main-page-play-steps {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 110px;
+  gap: 20px;
+}
+
+.main-page-play-steps-item {
+  flex: 1;
+}
+
+.main-page-play-steps-item p {
+  padding-left: 0;
+  padding-top: 15px;
+  padding-bottom: 5px;
+}
+
+.main-page-steps-footer {
+  display: flex;
+  max-width: 310px;
+  padding: 15px 0 20px;
+  align-items: flex-start;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  gap: 15px;
+}
+
+.main-page-steps-footer p {
+  padding: 0;
+}
+
+.main-page-steps-footer span {
+  padding-right: 5px;
+}
+
+.cash-pic-steps {
+  display: block;
+  min-width: 55px;
+  height: 55px;
+  border-radius: 10px;
+}
+
+.main-page-steps-under-text {
+  padding-left: 110px;
+  display: flex;
+  align-items: center;
+}
+
+/* How to win section */
+.main-page-how-to-win {
+  position: relative;
+  width: 100%;
+  padding: 60px 110px 0;
+  font-weight: 400;
+}
+
+.mp-how-to-win-wrapper {
+  width: 60%;
+}
+
+.mp-how-to-win-wrapper-p {
+  padding-top: 15px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.mp-how-to-win-img {
+  position: absolute;
+  top: 20px;
+  right: 50px;
+  z-index: 1;
+}
+
+.main-page-how-to-play-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+}
+
+/* Footer styles */
+.mp-footer-auth {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0 50px;
+  gap: 15px;
+}
+
+.main-page-footer,
+.main-page-footer-wrapper {
+  position: relative;
+  width: 100%;
+  z-index: 5;
+  overflow-x: hidden;
+  background: #010101;
+}
+
+.main-page-footer-bg {
+  width: 100%;
+  height: auto;
+}
+
+/* Compass decorations for mobile */
+.mp-compass,
+.mp-reverse-compass,
+.mp-red-compass {
+  display: none;
+}
+
+/* Responsive styles */
+@media (max-width: 1400px) {
+
+  .main-page-wrapper,
+  .main-page-background {
+    max-width: 1140px;
+  }
+
+  .main-page-content-title {
+    padding-top: 35px;
+  }
+
+  .font-size-35 {
+    font-size: 30px;
+  }
+
+  .main-page-play-button {
+    margin-top: 25px;
+  }
+
+  .main-page-big-plane img {
+    width: 600px;
+  }
+
+  .main-page-phone-plane {
+    top: 133px;
+  }
+
+  .main-page-phone-plane img {
+    width: 377px;
+  }
+
+  .main-page-content-h3 {
+    padding-top: 150px;
+    padding-left: 0;
+  }
+
+  .aviator-plane-clouds {
+    right: 0;
+  }
+
+  .aviator-plane-clouds img {
+    width: 480px;
+  }
+
+  .padding-left-110 {
+    padding-left: 0;
+  }
+
+  .main-page-play-steps {
+    padding: 20px 0;
+  }
+
+  .main-page-steps-under-text {
+    padding-left: 0;
+  }
+
+  .main-page-how-to-win {
+    padding: 60px 0 0;
+  }
+}
+
+@media (max-width: 1200px) {
+
+  .main-page-wrapper,
+  .main-page-background {
+    max-width: 960px;
+  }
+
+  .main-page-bg-cloud-2 {
+    left: 0;
+  }
+
+  .main-page-bg-cloud-1 {
+    right: 60px;
+  }
+
+  .main-page-logo img {
+    width: 180px;
+  }
+
+  .mp-how-to-win-wrapper {
+    width: 100%;
+  }
+
+  .mp-how-to-win-img {
+    display: none;
+  }
+}
+
+@media (max-width: 992px) {
+  .main-page-play-steps {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .main-page-steps-footer {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .main-page-wrapper,
+  .main-page-background {
+    width: 100%;
+    max-width: 600px;
+  }
+
+  .main-page-header-wrapper {
+    padding-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .main-page-logo {
+    padding-top: 7px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .main-page-logo img {
+    padding-left: 7px;
+    width: 135px;
+  }
+
+  .main-page-auth-wrapper {
+    padding: 10px 10px 5px;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .main-page-login-wrapper {
+    margin-right: 8px;
+  }
+
+  .login-button img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .login-button span {
+    display: flex;
+    font-size: 14px;
+    align-items: center;
+  }
+
+  .registration-button img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .registration-button span {
+    display: flex;
+    font-size: 14px;
+    padding-right: 5px;
+    align-items: center;
+  }
+
+  .font-size-35 {
+    font-size: 18px;
+  }
+
+  .font-size-42 {
+    font-size: 24px;
+  }
+
+  .main-page-content-title {
+    padding-top: 35px;
+  }
+
+  .main-page-bg-cloud-2 {
+    left: -50px;
+    top: 60px;
+  }
+
+  .main-page-bg-cloud-1 {
+    right: -70px;
+    top: 65px;
+  }
+
+  .main-page-bg-cloud-2 img,
+  .main-page-bg-cloud-1 img {
+    width: 200px;
+  }
+
+  .font-size-12 {
+    font-size: 10px;
+  }
+
+  .h2-mobile {
+    text-align: end;
+    padding-left: 120px;
+    padding-right: 10px;
+    padding-top: 20px;
+  }
+
+  .main-page-big-plane {
+    left: -100px;
+    top: 155px;
+  }
+
+  .main-page-big-plane img {
+    width: 280px;
+  }
+
+  .main-page-phone-plane {
+    top: 235px;
+    right: -15px;
+  }
+
+  .main-page-phone-plane img {
+    width: 180px;
+  }
+
+  .ready-aviatorwinn-section {
+    text-align: start !important;
+    padding-left: 10px;
+    font-size: 12px !important;
+    padding-top: 60px;
+  }
+
+  .main-page-play-button {
+    margin-top: 40px;
+  }
+
+  .main-page-content-h3 {
+    padding-top: 100px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .width-650 {
+    width: 100%;
+  }
+
+  .aviator-plane-clouds {
+    display: none;
+  }
+
+  .mp-compass {
+    display: block;
+    position: absolute;
+    top: 350px;
+    left: 0;
+    opacity: 0.3;
+  }
+
+  .mp-reverse-compass {
+    display: block;
+    position: absolute;
+    right: 0;
+    top: 420px;
+    opacity: 0.3;
+  }
+
+  .main-page-play-steps {
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 10px;
+  }
+
+  .main-page-content-h4 p {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .mp-how-to-win-wrapper h3 {
+    text-align: center;
+  }
+
+  .mp-how-to-win-img {
+    display: none;
+  }
+
+  .main-page-how-to-win {
+    padding: 40px 10px 0;
+  }
+
+  .main-page-how-to-win p {
+    font-size: 14px;
+  }
+
+  .mp-footer-auth {
+    padding-top: 20px;
+    padding-bottom: 30px;
+  }
+
+  .mp-red-compass {
+    position: absolute;
+    display: block;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0.3;
+  }
+}
+
+/* Animation for floating elements */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Utility classes */
+.flex {
+  display: flex;
+}
+
+.inline {
+  display: inline;
+}
+
+.mr-2 {
+  margin-right: 8px;
+}
+
+.gap-8 {
+  gap: 8px;
+}
+
+/* Aviator Plane Animation */
+@keyframes plane-fly {
+  0% {
+    transform: translate(0, 0) rotate(-5deg);
+  }
+
+  25% {
+    transform: translate(50px, -30px) rotate(-15deg);
+  }
+
+  50% {
+    transform: translate(80px, -50px) rotate(-10deg);
+  }
+
+  75% {
+    transform: translate(100px, -60px) rotate(-20deg);
+  }
+
+  100% {
+    transform: translate(120px, -70px) rotate(-15deg);
+  }
+}
+
+@keyframes plane-hover {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-plane {
+  animation: plane-hover 2s ease-in-out infinite;
+}
+
+.plane-container {
+  animation: plane-fly 8s ease-out forwards;
+}
+
+/* Curve Trail Animation */
+@keyframes draw-curve {
+  0% {
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+  }
+
+  100% {
+    stroke-dasharray: 600;
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-draw-curve {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: draw-curve 10s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Hide scrollbar for multiplier history */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Aviator Plane Wrapper */
+.plane-wrapper {
+  position: relative;
+  z-index: 5;
+}
+
+/* Engine Glow Effect */
+.engine-glow {
+  position: absolute;
+  bottom: -5px;
+  left: -20px;
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle, rgba(233, 28, 70, 0.8) 0%, rgba(255, 107, 107, 0.4) 40%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(8px);
+  animation: engine-pulse 0.3s ease-in-out infinite alternate;
+  z-index: 1;
+}
+
+@keyframes engine-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+}
+
+/* Particle Trail Container */
+.particle-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Individual Particles */
+.particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, rgba(255, 107, 107, 1) 0%, rgba(233, 28, 70, 0.6) 50%, transparent 100%);
+  border-radius: 50%;
+  opacity: 0;
+  animation: particle-fade 1.5s ease-out infinite;
+}
+
+.particle-1 {
+  left: 10px;
+  top: 20px;
+  animation-delay: 0s;
+}
+
+.particle-2 {
+  left: 5px;
+  top: 25px;
+  animation-delay: 0.3s;
+}
+
+.particle-3 {
+  left: 15px;
+  top: 18px;
+  animation-delay: 0.6s;
+}
+
+.particle-4 {
+  left: 8px;
+  top: 30px;
+  animation-delay: 0.9s;
+}
+
+.particle-5 {
+  left: 12px;
+  top: 22px;
+  animation-delay: 1.2s;
+}
+
+@keyframes particle-fade {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50px, 20px) scale(0.3);
+  }
+}
+
+/* Enhanced Plane Animation */
+@keyframes plane-fly {
+  0% {
+    transform: translate(0, 0) rotate(-5deg) scale(1);
+  }
+
+  20% {
+    transform: translate(30px, -20px) rotate(-12deg) scale(1.05);
+  }
+
+  40% {
+    transform: translate(60px, -45px) rotate(-8deg) scale(1.1);
+  }
+
+  60% {
+    transform: translate(90px, -65px) rotate(-15deg) scale(1.15);
+  }
+
+  80% {
+    transform: translate(115px, -80px) rotate(-10deg) scale(1.2);
+  }
+
+  100% {
+    transform: translate(140px, -95px) rotate(-18deg) scale(1.25);
+  }
+}
+
+@keyframes plane-hover {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-plane {
+  animation: plane-hover 1.5s ease-in-out infinite;
+  position: relative;
+  z-index: 3;
+}
+
+.plane-container {
+  animation: plane-fly-mobile 10s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  position: relative;
+}
+
+/* Mobile plane animation - shorter path */
+@keyframes plane-fly-mobile {
+  0% {
+    transform: translate(0, 0) rotate(-5deg) scale(1);
+  }
+
+  20% {
+    transform: translate(15px, -10px) rotate(-10deg) scale(1.02);
+  }
+
+  40% {
+    transform: translate(30px, -22px) rotate(-7deg) scale(1.05);
+  }
+
+  60% {
+    transform: translate(45px, -35px) rotate(-12deg) scale(1.08);
+  }
+
+  80% {
+    transform: translate(60px, -45px) rotate(-8deg) scale(1.1);
+  }
+
+  100% {
+    transform: translate(75px, -55px) rotate(-15deg) scale(1.12);
+  }
+}
+
+/* Desktop plane animation */
+@media (min-width: 640px) {
+  .plane-container {
+    animation: plane-fly 10s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+}
+
+/* Background Rotation */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 120s linear infinite;
+}
