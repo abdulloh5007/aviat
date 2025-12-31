@@ -93,9 +93,8 @@ interface BetsPanelProps {
 
 type TabType = 'bets' | 'previous' | 'top';
 
-export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: BetsPanelProps) {
-    const [activeTab, setActiveTab] = useState<TabType>('bets');
-
+// Memoized list component to prevent re-renders when multiplier changes
+const BetsList = React.memo(({ bets }: { bets: FakeBet[] }) => {
     // Sort: cashed out first (wins), then by amount
     const sortedBets = useMemo(() => [...bets].sort((a, b) => {
         if (a.cashedOut && !b.cashedOut) return -1;
@@ -106,18 +105,76 @@ export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: Be
         return b.amount - a.amount;
     }), [bets]);
 
+    return (
+        <div className="min-w-[400px]">
+            {sortedBets.length === 0 ? (
+                <div className="text-gray-500 text-center py-8 text-sm">
+                    Tikishlar kutilmoqda...
+                </div>
+            ) : (
+                <div>
+                    {sortedBets.map((bet) => (
+                        <div
+                            key={bet.id}
+                            className={`grid grid-cols-4 items-center px-3 py-2 border-b border-gray-800/30 ${bet.cashedOut ? 'bg-green-500/5' : ''
+                                }`}
+                        >
+                            {/* Avatar + Name */}
+                            <div className="flex items-center gap-2">
+                                <div className={`w-6 h-6 rounded-full ${bet.avatarColor} flex items-center justify-center text-white text-xs font-bold`}>
+                                    {bet.avatar}
+                                </div>
+                                <span className="text-gray-400 text-sm">{bet.maskedName}</span>
+                            </div>
+
+                            {/* Bet Amount */}
+                            <div className="text-right">
+                                <span className="text-white text-sm">{formatAmount(bet.amount)}</span>
+                            </div>
+
+                            {/* Multiplier */}
+                            <div className="text-center">
+                                {bet.cashedOut && bet.cashoutMultiplier && (
+                                    <span className="text-purple-400 text-sm font-medium">
+                                        {bet.cashoutMultiplier.toFixed(2)}x
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Win Amount */}
+                            <div className="text-right">
+                                {bet.cashedOut && bet.winAmount && (
+                                    <span className="text-green-400 text-sm font-medium">
+                                        {formatAmount(bet.winAmount)}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+});
+
+export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: BetsPanelProps) {
+    const [activeTab, setActiveTab] = useState<TabType>('bets');
+
     // Calculate totals - active players (not cashed out) / total players
     const totalPlayers = bets.length;
     const activePlayers = bets.filter(bet => !bet.cashedOut).length;
 
     // Total winnings: potential winnings for active players + actual winnings for cashed out
     const totalWinnings = useMemo(() => {
+        // Only calculate for active bets if game is flying
         const activeBetsWinnings = bets
             .filter(bet => !bet.cashedOut)
             .reduce((sum, bet) => sum + (bet.amount * currentMultiplier), 0);
+
         const cashedOutWinnings = bets
             .filter(bet => bet.cashedOut && bet.winAmount)
             .reduce((sum, bet) => sum + (bet.winAmount || 0), 0);
+
         return activeBetsWinnings + cashedOutWinnings;
     }, [bets, currentMultiplier]);
 
@@ -179,54 +236,7 @@ export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: Be
 
             {/* Bets List */}
             <div className="flex-1 overflow-y-auto overflow-x-auto max-h-[500px] lg:max-h-[calc(100vh-200px)] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                <div className="min-w-[400px]">
-                    {sortedBets.length === 0 ? (
-                        <div className="text-gray-500 text-center py-8 text-sm">
-                            Tikishlar kutilmoqda...
-                        </div>
-                    ) : (
-                        <div>
-                            {sortedBets.map((bet) => (
-                                <div
-                                    key={bet.id}
-                                    className={`grid grid-cols-4 items-center px-3 py-2 border-b border-gray-800/30 ${bet.cashedOut ? 'bg-green-500/5' : ''
-                                        }`}
-                                >
-                                    {/* Avatar + Name */}
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-6 h-6 rounded-full ${bet.avatarColor} flex items-center justify-center text-white text-xs font-bold`}>
-                                            {bet.avatar}
-                                        </div>
-                                        <span className="text-gray-400 text-sm">{bet.maskedName}</span>
-                                    </div>
-
-                                    {/* Bet Amount */}
-                                    <div className="text-right">
-                                        <span className="text-white text-sm">{formatAmount(bet.amount)}</span>
-                                    </div>
-
-                                    {/* Multiplier */}
-                                    <div className="text-center">
-                                        {bet.cashedOut && bet.cashoutMultiplier && (
-                                            <span className="text-purple-400 text-sm font-medium">
-                                                {bet.cashoutMultiplier.toFixed(2)}x
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* Win Amount */}
-                                    <div className="text-right">
-                                        {bet.cashedOut && bet.winAmount && (
-                                            <span className="text-green-400 text-sm font-medium">
-                                                {formatAmount(bet.winAmount)}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                <BetsList bets={bets} />
             </div>
 
             {/* Footer */}

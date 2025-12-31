@@ -115,20 +115,12 @@ export default function AviatorGamePage() {
         loadGameHistory();
     }, []);
 
-    // Save game round to database and send signal
+    // Save game round to database
     const saveGameRound = useCallback(async (multiplier: number) => {
         try {
-            // Save to database
             await supabase
                 .from('game_rounds')
                 .insert({ multiplier: multiplier });
-
-            // Send signal to Telegram
-            fetch('/api/telegram/game-signal', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ multiplier })
-            }).catch(err => console.error('Error sending signal:', err));
         } catch (err) {
             console.error('Error saving game round:', err);
         }
@@ -225,173 +217,134 @@ export default function AviatorGamePage() {
         const targetCount = 50 + Math.floor(Math.random() * 251); // 50 to 300
         const allBets = generateFakeBets(targetCount);
 
-        // Start with small number
-        const initialCount = Math.floor(targetCount * 0.05); // 5% initially
-        setFakeBets(allBets.slice(0, initialCount));
-
-        // Gradually add players over 4.5 seconds (leaving 0.5s before game starts)
-        let currentIndex = initialCount;
-        const steps = 10; // Number of steps
-        const stepInterval = 450; // 450ms between steps = 4.5 seconds total
-
-        const interval = setInterval(() => {
-            if (currentIndex >= targetCount) {
-                clearInterval(interval);
-                return;
-            }
-
-            // Add random batch of players (10-30% of remaining)
-            const remaining = targetCount - currentIndex;
-            const batchSize = Math.max(1, Math.floor(remaining * (0.1 + Math.random() * 0.25)));
-            currentIndex = Math.min(targetCount, currentIndex + batchSize);
-
-            setFakeBets(allBets.slice(0, currentIndex));
-        }, stepInterval);
-
-        return () => clearInterval(interval);
+        // Show all bets immediately to avoid repeated re-renders causing lag
+        setFakeBets(allBets);
     }, [gameState]);
 
-    // Process fake bet cashouts during flying
-    useEffect(() => {
-        if (gameState !== 'flying') return;
-        setFakeBets(prevBets =>
-            prevBets.map(bet => {
-                if (!bet.cashedOut && currentMultiplier >= bet.targetMultiplier) {
-                    return {
-                        ...bet,
-                        cashedOut: true,
-                        cashoutMultiplier: bet.targetMultiplier,
-                        winAmount: Math.floor(bet.amount * bet.targetMultiplier)
-                    };
-                }
-                return bet;
-            })
-        );
-    }, [gameState, currentMultiplier]);
 
-    // Game Engine Mode Selection
+
+    // Process fake bet cashouts during flying
+
+
+    // Game Loop (User Mode Only)
     useEffect(() => {
         let isActive = true;
         let countdownInterval: NodeJS.Timeout | null = null;
         let flyInterval: NodeJS.Timeout | null = null;
         let restartTimeout: NodeJS.Timeout | null = null;
 
-        // Generate multiplier
+        // Generate random multiplier
         const generateMultiplier = () => {
+            // Weighted random distribution to mimic real game behavior across large sample size
             const rand = Math.random() * 100;
-            if (rand < 3) return 1.00;
-            if (rand < 18) return 1.01 + Math.random() * 0.49;
-            if (rand < 43) return 1.5 + Math.random() * 0.5;
-            if (rand < 68) return 2 + Math.random() * 1;
-            if (rand < 83) return 3 + Math.random() * 2;
-            if (rand < 93) return 5 + Math.random() * 5;
-            if (rand < 98) return 10 + Math.random() * 40;
-            return 50 + Math.random() * 50;
+            if (rand < 3) return 1.00; // Instant crash (3%)
+            if (rand < 18) return 1.01 + Math.random() * 0.49; // 1.01x - 1.50x (15%)
+            if (rand < 43) return 1.5 + Math.random() * 0.5; // 1.50x - 2.00x (25%)
+            if (rand < 68) return 2 + Math.random() * 1; // 2.00x - 3.00x (25%)
+            if (rand < 83) return 3 + Math.random() * 2; // 3.00x - 5.00x (15%)
+            if (rand < 93) return 5 + Math.random() * 5; // 5.00x - 10.00x (10%)
+            if (rand < 98) return 10 + Math.random() * 40; // 10.00x - 50.00x (5%)
+            return 50 + Math.random() * 50; // 50.00x - 100.00x (2%)
         };
 
-        // Import game config
-        import('@/lib/game-config').then(({ GAME_ENGINE_MODE, GAME_WS_URL }) => {
+        const runGame = () => {
             if (!isActive) return;
 
-            if (GAME_ENGINE_MODE === 'machine') {
-                // MACHINE MODE: Connect to WebSocket server
-                import('socket.io-client').then(({ io }) => {
-                    if (!isActive) return;
-                    const socket = io(GAME_WS_URL);
+            // 1. Waiting Phase
+            setGameState('waiting');
+            setCurrentMultiplier(1.00);
 
-                    socket.on('connect', () => {
-                        console.log('🔌 Connected to game server (machine mode)');
-                    });
+            // Generate next target
+            let targetValue = parseFloat(generateMultiplier().toFixed(2));
+            setTargetMultiplier(targetValue);
 
-                    socket.on('gameState', (state: {
-                        game_state: 'waiting' | 'flying' | 'crashed';
-                        current_multiplier: number;
-                        target_multiplier: number;
-                        countdown_seconds: number;
-                        round_id: number;
-                    }) => {
+            // Send signal to Telegram at START of round (during waiting phase)
+            fetch('/api/telegram/game-signal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ multiplier: targetValue })
+            }).catch(() => { }); // Fire and forget
+
+            let countdown = 5;
+            setCountdownSeconds(countdown);
+            setCountdownProgress(100);
+
+            countdownInterval = setInterval(() => {
+                if (!isActive) return;
+                countdown -= 1;
+                setCountdownSeconds(Math.max(0, countdown));
+                setCountdownProgress((countdown / 5) * 100);
+
+                if (countdown <= 0) {
+                    if (countdownInterval) clearInterval(countdownInterval);
+
+                    // 2. Flying Phase
+                    setGameState('flying');
+
+                    // Start flying loop
+                    let currentMult = 1.00;
+                    flyInterval = setInterval(() => {
                         if (!isActive) return;
-                        setGameState(state.game_state);
-                        setCurrentMultiplier(state.current_multiplier);
-                        setTargetMultiplier(state.target_multiplier);
-                        setCountdownSeconds(state.countdown_seconds);
-                        setCountdownProgress(state.countdown_seconds * 20);
 
-                        if (state.game_state === 'crashed') {
-                            if (lastSavedMultiplier.current !== state.target_multiplier) {
-                                lastSavedMultiplier.current = state.target_multiplier;
-                                setMultiplierHistory(h => [state.target_multiplier, ...h.slice(0, 29)]);
-                            }
+                        // Variable speed: slow until 5x, then accelerate
+                        let increment: number;
+                        if (currentMult < 5) {
+                            // Very slow: 0.006 per tick = ~0.2x per second
+                            increment = 0.006;
+                        } else {
+                            // Accelerate after 5x: starts at 0.03, grows progressively
+                            increment = 0.03 + (currentMult - 5) * 0.002;
                         }
-                    });
+                        currentMult += increment;
 
-                    socket.on('disconnect', () => {
-                        console.log('❌ Disconnected from game server');
-                    });
-                });
-            } else {
-                // USER MODE: Simple client-side game loop
-                console.log('🎮 Game running in user mode');
+                        // Check if we hit target
+                        if (currentMult >= targetValue) {
+                            currentMult = targetValue;
+                            if (flyInterval) clearInterval(flyInterval);
 
-                let targetValue = parseFloat(generateMultiplier().toFixed(2));
-                setTargetMultiplier(targetValue);
+                            // 3. Crashed Phase
+                            setGameState('crashed');
+                            setCurrentMultiplier(targetValue);
 
-                const runGame = () => {
-                    if (!isActive) return;
-
-                    // Waiting phase
-                    setGameState('waiting');
-                    setCurrentMultiplier(1.00);
-                    let countdown = 5;
-                    setCountdownSeconds(countdown);
-                    setCountdownProgress(100);
-
-                    countdownInterval = setInterval(() => {
-                        if (!isActive) { clearInterval(countdownInterval!); return; }
-                        countdown--;
-                        setCountdownSeconds(countdown);
-                        setCountdownProgress(countdown * 20);
-
-                        if (countdown <= 0) {
-                            clearInterval(countdownInterval!);
-
-                            // Flying phase
-                            setGameState('flying');
-                            let mult = 1.00;
-
-                            flyInterval = setInterval(() => {
-                                if (!isActive) { clearInterval(flyInterval!); return; }
-                                mult += 0.01;
-                                if (mult >= targetValue) mult = targetValue;
-                                setCurrentMultiplier(parseFloat(mult.toFixed(2)));
-
-                                if (mult >= targetValue) {
-                                    clearInterval(flyInterval!);
-                                    setGameState('crashed');
-
-                                    if (lastSavedMultiplier.current !== targetValue) {
-                                        lastSavedMultiplier.current = targetValue;
-                                        setMultiplierHistory(h => [targetValue, ...h.slice(0, 29)]);
-                                        supabase.from('game_rounds').insert({ multiplier: targetValue });
-                                    }
-
-                                    restartTimeout = setTimeout(() => {
-                                        if (!isActive) return;
-                                        targetValue = parseFloat(generateMultiplier().toFixed(2));
-                                        setTargetMultiplier(targetValue);
-                                        runGame();
-                                    }, 3000);
+                            // Finalize fake bets (process cashouts for any who won)
+                            setFakeBets(prevBets => prevBets.map(bet => {
+                                if (!bet.cashedOut && targetValue >= bet.targetMultiplier) {
+                                    return {
+                                        ...bet,
+                                        cashedOut: true,
+                                        cashoutMultiplier: bet.targetMultiplier,
+                                        winAmount: Math.floor(bet.amount * bet.targetMultiplier)
+                                    };
                                 }
-                            }, 50);
+                                return bet;
+                            }));
+
+                            // Save history if new
+                            if (lastSavedMultiplier.current !== targetValue) {
+                                lastSavedMultiplier.current = targetValue;
+                                setMultiplierHistory(h => [targetValue, ...h.slice(0, 29)]);
+                                // Fire and forget save
+                                supabase.from('game_rounds').insert({ multiplier: targetValue }).then();
+                            }
+
+                            // Schedule restart
+                            restartTimeout = setTimeout(() => {
+                                runGame();
+                            }, 3000);
+
+                        } else {
+                            // Update multiplier state
+                            setCurrentMultiplier(parseFloat(currentMult.toFixed(2)));
                         }
-                    }, 1000);
-                };
+                    }, 30); // 30ms = ~33 FPS
+                }
+            }, 1000);
+        };
 
-                runGame();
-            }
-        });
+        // Start the game loop
+        runGame();
 
-        // Cleanup
+        // Cleanup function
         return () => {
             isActive = false;
             if (countdownInterval) clearInterval(countdownInterval);

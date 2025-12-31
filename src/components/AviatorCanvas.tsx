@@ -10,8 +10,28 @@ interface AviatorCanvasProps {
 const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ gameState, currentMultiplier }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const planeImageRef = useRef<HTMLImageElement | null>(null);
-    const animationFrameRef = useRef<number | null>(null);
     const crashTimeRef = useRef(0);
+    const animationFrameRef = useRef<number | undefined>(undefined);
+
+    // Store latest props in ref for the animation loop to access
+    const latestProps = useRef({ gameState, currentMultiplier });
+
+    // Smooth multiplier interpolation
+    const visualMultiplierRef = useRef(1.0);
+
+    // Update refs when props change
+    useEffect(() => {
+        latestProps.current = { gameState, currentMultiplier };
+        // Reset visual multiplier on new game
+        if (gameState === 'waiting') {
+            visualMultiplierRef.current = 1.0;
+            crashTimeRef.current = 0;
+        }
+        // Force sync if visual falls too far behind (e.g. tab switch)
+        if (Math.abs(visualMultiplierRef.current - currentMultiplier) > 0.5) {
+            visualMultiplierRef.current = currentMultiplier;
+        }
+    }, [gameState, currentMultiplier]);
 
     // Load plane image
     useEffect(() => {
@@ -22,19 +42,18 @@ const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ gameState, currentMultipl
         };
     }, []);
 
+    // Main Animation Loop
     useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
         const render = () => {
-            if (!canvas || !ctx) return;
+            const canvas = canvasRef.current;
+            if (!canvas) return;
 
-            // Resize canvas to parent
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            // Handle sizing
             const parent = canvas.parentElement;
-            if (parent) {
+            if (parent && (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight)) {
                 canvas.width = parent.clientWidth;
                 canvas.height = parent.clientHeight;
             }
@@ -42,149 +61,163 @@ const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ gameState, currentMultipl
             const width = canvas.width;
             const height = canvas.height;
 
-            // Clear canvas
+            // Clear
             ctx.clearRect(0, 0, width, height);
 
-            // 1. Draw Curve and Plane based on state
+            const { gameState, currentMultiplier } = latestProps.current;
+
+            if (gameState === 'waiting') {
+                // Clear state, maybe draw static plane on runway
+                visualMultiplierRef.current = 1.0;
+                // Optional: Draw waiting state visuals here if needed
+            } else if (gameState === 'flying') {
+                // Smoothly interpolate visual multiplier towards actual currentMultiplier
+                // LERP factor 0.1 gives smooth follow, but we need to ensure it doesn't lag too much
+                // Since we update currentMultiplier every 30ms, we can just move towards it.
+                const diff = currentMultiplier - visualMultiplierRef.current;
+                visualMultiplierRef.current += diff * 0.2; // 20% catchup per frame (60fps)
+            } else if (gameState === 'crashed') {
+                // In crashed state, we don't update multiplier, but we animate the plane flying away
+            }
+
             if (gameState === 'flying' || gameState === 'crashed') {
-                drawGameScene(ctx, width, height, currentMultiplier, gameState);
-            } else {
-                drawWaitingScene(ctx, width, height);
+                drawGameScene(ctx, width, height, visualMultiplierRef.current, gameState);
             }
 
             animationFrameRef.current = requestAnimationFrame(render);
         };
 
+        // Start loop
         render();
 
         return () => {
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-            }
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         };
-    }, [gameState, currentMultiplier]);
+    }, []);
 
-    // Helper: Draw Waiting Scene (Empty, plane invisible)
-    const drawWaitingScene = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-        // Plane is invisible during waiting as requested
-        return;
-    };
-
-    // Helper: Draw Flying/Crashed Scene
     const drawGameScene = (ctx: CanvasRenderingContext2D, width: number, height: number, multiplier: number, state: string) => {
-        // Calculate plane position based on multiplier "curve"
-        const progress = Math.min((multiplier - 1.0) / 1.0, 1);
+        // Non-linear progress: slow until 3x, then logarithmic (counter accelerates but plane stays slow)
+        let progress: number;
+        if (multiplier <= 3.0) {
+            // From 1.0x to 3.0x: progress goes 0 to 0.6 (slow, linear)
+            progress = ((multiplier - 1.0) / 2.0) * 0.6;
+        } else {
+            // After 3.0x: logarithmic scale (plane barely moves, counter can go crazy)
+            // At 3x: 0.6, at 10x: ~0.75, at 50x: ~0.9, at 100x: ~0.95
+            const logProgress = Math.log10(multiplier - 2) / Math.log10(100); // 0 at 3x, 1 at 102x
+            progress = 0.6 + 0.4 * Math.min(logProgress, 1);
+        }
+        progress = Math.min(progress, 1);
 
-        // Start position
+        // Start from far left edge
         const startX = 0;
         const startY = height - 20;
+        const cruiseX = width * 0.75;
+        const cruiseY = height * 0.25;
 
-        // End position (Cruise)
-        const cruiseX = width * 0.7; // 70% width
-        const cruiseY = height * 0.2; // 20% height (top)
+        // Smooth easing
+        const ease = 1 - Math.pow(1 - progress, 2);
 
-        // Calculate current plane X,Y (Base position on curve)
-        let currentX = startX + (cruiseX - startX) * progress;
-        let currentY = startY + (cruiseY - startY) * progress;
+        let currentX = startX + (cruiseX - startX) * ease;
+        let currentY = startY + (cruiseY - startY) * ease;
+        let rotation = -15 * ease;
 
-        // Base values for trail endpoint
-        let trailX = currentX;
-        let trailY = currentY;
-
-        // Add curve influence
-        if (progress < 1) {
-            const t = progress;
-            const ease = 1 - Math.pow(1 - t, 3); // Cubic ease out
-            currentX = startX + (cruiseX - startX) * ease;
-            currentY = startY + (cruiseY - startY) * ease;
-            trailX = currentX;
-            trailY = currentY;
-        }
-
-        // Apply visual hover effect (swimming) - affects both Plane and Trail
-        if (state === 'flying') {
-            const amplitude = height * 0.25; // 25% height amplitude for deep dives
-            let rawSin = Math.sin(Date.now() / 1500);
-
-            // Bias: Deep dive, shallow rise
-            // If sin is negative (going UP), scale it down significantly
-            if (rawSin < 0) rawSin *= 0.2;
-
-            const hoverOffset = rawSin * amplitude;
-            const scale = Math.min(progress, 1);
-            currentY += hoverOffset * scale;
-            trailY += hoverOffset * scale;
-        }
-
-        // Handle Crash Animation (Fly Away)
         if (state === 'crashed') {
             if (crashTimeRef.current === 0) crashTimeRef.current = Date.now();
             const dt = (Date.now() - crashTimeRef.current) / 1000;
-            // Accelerate up and right
-            currentX += dt * 1000 + Math.pow(dt, 2) * 500;
-            currentY -= dt * 500 + Math.pow(dt, 2) * 200;
+
+            currentX += dt * 800;
+            currentY -= dt * 400;
+            rotation -= dt * 90;
         } else {
             crashTimeRef.current = 0;
+
+            // "Dive" Effect during cruise (when progress is essentially 1)
+            // Even during takeoff (progress < 1), we can add little turbulence
+            // But main "Dive" is requested "at the end" (cruise)
+
+            // Continuous sinusoidal wave that gets deeper as we reach cruise
+            const time = Date.now() / 2000; // Slow wave (2 seconds)
+            const baseWave = Math.sin(time);
+
+            // Amplitude grows with progress. At cruise (1.0), amplitude is large.
+            // "Dive to center": Center is ~height/2. CruiseY is height*0.2.
+            // We want it to dip DOWN (positive Y).
+            const diveAmplitude = (height * 0.15) * progress; // Max dive 15% of height
+
+            // Only apply significant looping movement when near cruise
+            if (progress > 0.8) {
+                // Secondary "Dive" loop
+                // "Dive to center and up to its place"
+                // Using a combination of Sin for Y and Cos for X to make a slight oval
+                const divePhase = (Date.now() / 3000) * Math.PI * 2;
+
+                // When Sin is 1 (down), we add Y.
+                // We want it to mostly stay at cruiseY but occasionally dip.
+                // Squared sin gives a "bounce" or we just use normal sin.
+
+                const hoverY = Math.sin(divePhase) * (height * 0.15);
+                const hoverX = Math.cos(divePhase) * (width * 0.05);
+
+                // Blend it in based on progress (smooth transition from takeoff to cruise loop)
+                const blend = Math.max(0, (progress - 0.8) / 0.2);
+
+                currentY += hoverY * blend;
+                currentX += hoverX * blend;
+
+                // Tilt plane with the dive
+                rotation += (Math.cos(divePhase) * 10) * blend;
+            }
         }
 
-        // Draw Trail (Area under curve) - Only if NOT crashed
+        // Draw Trail
         if (state !== 'crashed') {
             ctx.beginPath();
             ctx.moveTo(0, height);
             ctx.lineTo(startX, startY);
 
-            // Draw curve to current position
-            const currentCpX = startX + (currentX - startX) * 0.5;
-            const currentCpY = height;
+            // Control point for curve
+            const controlX = startX + (currentX - startX) * 0.3;
+            // Dynamic control Y to make the trail follow the "dive"
+            const controlY = startY + (currentY - startY) * 0.2;
 
-            ctx.quadraticCurveTo(currentCpX, currentCpY, trailX + 30, trailY + 40);
+            ctx.quadraticCurveTo(controlX, controlY, currentX, currentY);
 
-            ctx.lineTo(trailX, height);
+            ctx.lineTo(currentX, height);
             ctx.lineTo(0, height);
             ctx.closePath();
 
-            // Gradient fill
             const gradient = ctx.createLinearGradient(0, 0, 0, height);
-            gradient.addColorStop(0, 'rgba(233, 28, 70, 0.5)');
-            gradient.addColorStop(1, 'rgba(233, 28, 70, 0.1)');
+            gradient.addColorStop(0, 'rgba(233, 28, 70, 0.4)');
+            gradient.addColorStop(1, 'rgba(233, 28, 70, 0.05)');
             ctx.fillStyle = gradient;
             ctx.fill();
 
-            // Stroke line
+            // Draw Line
             ctx.beginPath();
             ctx.moveTo(startX, startY);
-            ctx.quadraticCurveTo(currentCpX, currentCpY, trailX + 10, trailY + 30);
+            ctx.quadraticCurveTo(controlX, controlY, currentX, currentY);
             ctx.strokeStyle = '#e91c46';
             ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
             ctx.stroke();
         }
 
         // Draw Plane
         if (planeImageRef.current) {
-            ctx.save();
+            // Check if plane is onscreen
+            if (currentX > -100 && currentX < width + 100 && currentY > -100 && currentY < height + 100) {
+                ctx.save();
+                ctx.translate(currentX, currentY);
+                ctx.rotate(rotation * Math.PI / 180);
 
-            // Plane position already includes hover offset
-            ctx.translate(currentX, currentY);
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetY = 10;
 
-            // Rotate plane based on ascent
-            let rotation = -10 * (1 - progress); // Starts at 0, tilts up to -20
-
-            if (state === 'crashed') {
-                // Rotate sharply up when flying away
-                rotation -= 25;
-            } else if (state === 'flying') {
-                // Add subtle hover wobble (rotation)
-                rotation += Math.sin(Date.now() / 500) * 2;
+                ctx.drawImage(planeImageRef.current, -40, -20, 80, 40);
+                ctx.restore();
             }
-
-            ctx.rotate((rotation - 15) * Math.PI / 180); // Base rotation -15deg
-
-            // Draw plane centered
-            const w = 120;
-            const h = 60;
-            ctx.drawImage(planeImageRef.current, -w / 2, -h / 2, w, h);
-
-            ctx.restore();
         }
     };
 

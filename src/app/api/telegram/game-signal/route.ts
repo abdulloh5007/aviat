@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GROUP_ANALYSIS_ID = process.env.GROUP_ANALYSIS_ID;
@@ -10,77 +8,59 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { multiplier } = body;
 
-        console.log('Signal request received:', { multiplier, GROUP_ANALYSIS_ID });
-
         if (!BOT_TOKEN || !GROUP_ANALYSIS_ID) {
-            console.error('Telegram credentials not configured');
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
 
-        // Determine recommendation based on target multiplier
-        const isGoodBet = multiplier >= 1.50;
-        const recommendation = isGoodBet
-            ? "✅ *Tavsiya:* STAVKA QILING"
-            : "⚠️ *Tavsiya:* KICHIK STAVKA yoki O'tkazib yuboring";
-
-        // Get signal strength
+        // Determine signal strength
         let signalStrength = "🔴 Past";
-        if (multiplier >= 10) signalStrength = "🟢 Juda Yuqori";
-        else if (multiplier >= 5) signalStrength = "🟢 Yuqori";
-        else if (multiplier >= 2) signalStrength = "🟡 O'rta";
-        else if (multiplier >= 1.5) signalStrength = "🟠 O'rtacha";
+        let recommendation = "⚠️ O'tkazib yuboring";
 
-        // Construct the message for NEXT round
-        const message = `🛫 *KEYINGI RAUND SIGNALI* 🛫
-
-━━━━━━━━━━━━━━━━━━
-🎯 *Prognoz:* ${multiplier.toFixed(2)}x
-📊 *Signal kuchi:* ${signalStrength}
-━━━━━━━━━━━━━━━━━━
-
-${recommendation}
-
-⏰ 5 sekund ichida boshlaydi!
-`;
-
-        // Load the image
-        // We'll use the 'plane.png' from public/AviatorWinn_files/plane.png 
-        // Note: In Next.js server actions, process.cwd() is the root of the project
-        const imagePath = path.join(process.cwd(), 'public', 'AviatorWinn_files', 'plane.png');
-
-        // Check if file exists
-        if (!fs.existsSync(imagePath)) {
-            console.error('Image file not found:', imagePath);
-            // Fallback to text only if image fails, but better to fail or let user know
-            // For now try to send without image or error? 
-            // Let's try to send simple message if image missing
+        if (multiplier >= 10) {
+            signalStrength = "🟢 Juda Yuqori";
+            recommendation = "✅ KATTA STAVKA";
+        } else if (multiplier >= 5) {
+            signalStrength = "🟢 Yuqori";
+            recommendation = "✅ STAVKA QILING";
+        } else if (multiplier >= 2) {
+            signalStrength = "🟡 O'rta";
+            recommendation = "✅ STAVKA QILING";
+        } else if (multiplier >= 1.5) {
+            signalStrength = "🟠 O'rtacha";
+            recommendation = "⚡ Kichik stavka";
         }
 
-        const fileBuffer = fs.readFileSync(imagePath);
-        const blob = new Blob([fileBuffer], { type: 'image/png' });
+        const message = `🛫 *KEYINGI RAUND SIGNALI*
 
-        const telegramFormData = new FormData();
-        telegramFormData.append('chat_id', GROUP_ANALYSIS_ID);
-        telegramFormData.append('caption', message);
-        telegramFormData.append('parse_mode', 'Markdown');
-        telegramFormData.append('photo', blob, 'plane.png');
+🎯 Prognoz: *${multiplier.toFixed(2)}x*
+📊 Signal: ${signalStrength}
+💡 ${recommendation}
 
-        console.log('Sending photo to Telegram...');
-        const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-            method: 'POST',
-            body: telegramFormData,
-        });
+⏱ 5 sek ichida boshlaydi!`;
 
-        const result = await response.json();
+        // Send text message with AbortController timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
 
-        if (!result.ok) {
-            console.error('Telegram API error:', result);
-            return NextResponse.json({ error: 'Failed to send notification', details: result }, { status: 500 });
+        try {
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: GROUP_ANALYSIS_ID,
+                    text: message,
+                    parse_mode: 'Markdown'
+                }),
+                signal: controller.signal
+            });
+        } catch (fetchError) {
+            // Timeout or network error - ignore silently to prevent lag
+        } finally {
+            clearTimeout(timeoutId);
         }
 
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error('Error sending signal notification:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        return NextResponse.json({ error: 'Error' }, { status: 500 });
     }
 }
