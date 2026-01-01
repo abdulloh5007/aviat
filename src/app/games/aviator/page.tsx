@@ -99,6 +99,13 @@ export default function AviatorGamePage() {
     // Ref to prevent duplicate saves
     const lastSavedMultiplier = useRef<number | null>(null);
 
+    // Redirect to home if not authenticated
+    useEffect(() => {
+        if (!loading && !user) {
+            router.push('/');
+        }
+    }, [user, loading, router]);
+
     // Load game history
     useEffect(() => {
         const loadGameHistory = async () => {
@@ -548,6 +555,15 @@ export default function AviatorGamePage() {
 
     // Loading state
     if (loading) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-[#181818] to-[#010101] flex items-center justify-center">
+                <Loader2 className="w-10 h-10 text-white animate-spin" />
+            </div>
+        );
+    }
+
+    // Show loading while redirecting unauthenticated users
+    if (!user) {
         return (
             <div className="min-h-screen bg-gradient-to-b from-[#181818] to-[#010101] flex items-center justify-center">
                 <Loader2 className="w-10 h-10 text-white animate-spin" />
