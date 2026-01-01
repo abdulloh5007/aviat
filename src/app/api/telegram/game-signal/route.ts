@@ -12,31 +12,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
 
-        // Determine signal strength
-        let signalStrength = "🔴 Past";
-        let recommendation = "⚠️ O'tkazib yuboring";
+        const message = `Aviator o'yini uchun bepul signal
+Keyingi aylanma natijasi ${multiplier.toFixed(2)}x
 
-        if (multiplier >= 10) {
-            signalStrength = "🟢 Juda Yuqori";
-            recommendation = "✅ KATTA STAVKA";
-        } else if (multiplier >= 5) {
-            signalStrength = "🟢 Yuqori";
-            recommendation = "✅ STAVKA QILING";
-        } else if (multiplier >= 2) {
-            signalStrength = "🟡 O'rta";
-            recommendation = "✅ STAVKA QILING";
-        } else if (multiplier >= 1.5) {
-            signalStrength = "🟠 O'rtacha";
-            recommendation = "⚡ Kichik stavka";
-        }
-
-        const message = `🛫 *KEYINGI RAUND SIGNALI*
-
-🎯 Prognoz: *${multiplier.toFixed(2)}x*
-📊 Signal: ${signalStrength}
-💡 ${recommendation}
-
-⏱ 5 sek ichida boshlaydi!`;
+Bu signallar faqat <a href="https://aviator-kazino.vercel.app/">aviatorwin.com</a> o'yini uchun maxsuslangan`;
 
         // Send text message with AbortController timeout
         const controller = new AbortController();
@@ -49,7 +28,8 @@ export async function POST(request: NextRequest) {
                 body: JSON.stringify({
                     chat_id: GROUP_ANALYSIS_ID,
                     text: message,
-                    parse_mode: 'Markdown'
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: true
                 }),
                 signal: controller.signal
             });

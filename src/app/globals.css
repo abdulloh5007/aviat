@@ -780,6 +780,31 @@ body {
   animation: float 3s ease-in-out infinite;
 }
 
+/* Toast slide animation */
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
 /* Utility classes */
 .flex {
   display: flex;

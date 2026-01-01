@@ -1,6 +1,6 @@
 'use client';
 
-import { X, User, Wallet, ArrowDownCircle, FileText, Bell, HeadphonesIcon } from 'lucide-react';
+import { X, User, Wallet, ArrowDownCircle, FileText, Bell, HeadphonesIcon, Shield, Users } from 'lucide-react';
 import { formatAmount } from '../constants';
 
 interface SideDrawerProps {
@@ -8,10 +8,13 @@ interface SideDrawerProps {
     onClose: () => void;
     userId: string;
     userBalance: number;
+    isAdmin?: boolean;
     onProfileClick: () => void;
     onDepositClick: () => void;
     onWithdrawClick: () => void;
     onHistoryClick: () => void;
+    onAdminClick?: () => void;
+    onUsersClick?: () => void;
     onSignOut: () => void;
 }
 
@@ -20,10 +23,13 @@ export default function SideDrawer({
     onClose,
     userId,
     userBalance,
+    isAdmin,
     onProfileClick,
     onDepositClick,
     onWithdrawClick,
     onHistoryClick,
+    onAdminClick,
+    onUsersClick,
     onSignOut,
 }: SideDrawerProps) {
     return (
@@ -94,6 +100,30 @@ export default function SideDrawer({
                         <HeadphonesIcon size={22} className="text-gray-500" />
                         <span className="text-gray-800 font-medium">Texnik yordam</span>
                     </button>
+
+                    {/* Admin Section */}
+                    {isAdmin && (
+                        <div className="border-t border-gray-100 mt-2 pt-2">
+                            {onAdminClick && (
+                                <button
+                                    onClick={onAdminClick}
+                                    className="w-full flex items-center gap-4 px-6 py-4 hover:bg-red-50 transition-colors"
+                                >
+                                    <Shield size={22} className="text-red-500" />
+                                    <span className="text-red-600 font-medium">Admin Panel</span>
+                                </button>
+                            )}
+                            {onUsersClick && (
+                                <button
+                                    onClick={onUsersClick}
+                                    className="w-full flex items-center gap-4 px-6 py-4 hover:bg-purple-50 transition-colors"
+                                >
+                                    <Users size={22} className="text-purple-500" />
+                                    <span className="text-purple-600 font-medium">Foydalanuvchilar</span>
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Logout Button */}
@@ -109,3 +139,4 @@ export default function SideDrawer({
         </div>
     );
 }
+

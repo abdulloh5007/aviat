@@ -22,7 +22,7 @@ const AuthContext = createContext<AuthContextType>({
 export const useAuth = () => useContext(AuthContext);
 
 // Public routes that don't require authentication
-const publicRoutes = ['/', '/login', '/registration'];
+const publicRoutes = ['/', '/login', '/registration', '/admin'];
 
 // Routes that authenticated users should be redirected away from
 const authRoutes = ['/', '/login', '/registration'];

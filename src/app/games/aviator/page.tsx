@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { useAuth } from '@/lib/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Loader2, X, Shield, Copy, Check } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // Import local components
 import { GameHeader, HistoryBar, SideDrawer, BettingCard, WithdrawModal, ErrorModal, SuccessModal } from './components';
@@ -91,6 +92,10 @@ export default function AviatorGamePage() {
     // Fake Bets State
     const [fakeBets, setFakeBets] = useState<FakeBet[]>([]);
 
+    // Admin State
+    const [isAdmin, setIsAdmin] = useState(false);
+    const router = useRouter();
+
     // Ref to prevent duplicate saves
     const lastSavedMultiplier = useRef<number | null>(null);
 
@@ -114,6 +119,26 @@ export default function AviatorGamePage() {
 
         loadGameHistory();
     }, []);
+
+    // Check admin status
+    useEffect(() => {
+        const checkAdminStatus = async () => {
+            if (user?.id) {
+                try {
+                    const response = await fetch('/api/admin/check', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: user.id })
+                    });
+                    const data = await response.json();
+                    setIsAdmin(data.isAdmin === true);
+                } catch (err) {
+                    setIsAdmin(false);
+                }
+            }
+        };
+        checkAdminStatus();
+    }, [user]);
 
     // Save game round to database
     const saveGameRound = useCallback(async (multiplier: number) => {
@@ -405,11 +430,16 @@ export default function AviatorGamePage() {
 
     const handleAmountChange = (value: string) => {
         const numericValue = value.replace(/[^0-9]/g, '');
-        setAmount(numericValue);
+        if (numericValue) {
+            const formatted = parseInt(numericValue).toLocaleString('uz-UZ').replace(/,/g, ' ');
+            setAmount(formatted);
+        } else {
+            setAmount('');
+        }
     };
 
     const selectQuickAmount = (value: number) => {
-        setAmount(value.toString());
+        setAmount(value.toLocaleString('uz-UZ').replace(/,/g, ' '));
     };
 
     const proceedToConfirm = async () => {
@@ -422,7 +452,7 @@ export default function AviatorGamePage() {
             return;
         }
 
-        const numAmount = parseInt(amount);
+        const numAmount = parseInt(amount.replace(/\s/g, ''));
         if (isNaN(numAmount) || numAmount < selectedPayment.minAmount || numAmount > selectedPayment.maxAmount) {
             setErrorMessage(`Miqdor ${formatAmount(selectedPayment.minAmount)} dan ${formatAmount(selectedPayment.maxAmount)} gacha bo'lishi kerak`);
             setShowErrorModal(true);
@@ -498,6 +528,7 @@ export default function AviatorGamePage() {
             formData.append('userId', userId);
             formData.append('method', selectedPayment.id);
             formData.append('amount', currentPaymentRequest.amount.toString());
+            formData.append('paymentRequestId', currentPaymentRequest.id);
             if (uploadedFile) {
                 formData.append('file', uploadedFile);
             }
@@ -661,12 +692,14 @@ export default function AviatorGamePage() {
                             setBetAmount={setBetAmount1}
                             betType={betType1}
                             setBetType={setBetType1}
-                            isBetting={isBetting1}
-                            setIsBetting={setIsBetting1}
                             formatAmount={formatAmount}
                             showAddButton={!showSecondBet}
                             onAdd={() => setShowSecondBet(true)}
                             userBalance={userBalance}
+                            userId={user?.id || ''}
+                            gameState={gameState}
+                            currentMultiplier={currentMultiplier}
+                            onBalanceUpdate={(newBalance) => setUserBalance(newBalance)}
                             onInsufficientBalance={() => {
                                 setErrorMessage("Balansingiz yetarli emas! Iltimos, hisobingizni to'ldiring.");
                                 setShowErrorModal(true);
@@ -679,12 +712,14 @@ export default function AviatorGamePage() {
                                 setBetAmount={setBetAmount2}
                                 betType={betType2}
                                 setBetType={setBetType2}
-                                isBetting={isBetting2}
-                                setIsBetting={setIsBetting2}
                                 formatAmount={formatAmount}
                                 showRemoveButton
                                 onRemove={() => setShowSecondBet(false)}
                                 userBalance={userBalance}
+                                userId={user?.id || ''}
+                                gameState={gameState}
+                                currentMultiplier={currentMultiplier}
+                                onBalanceUpdate={(newBalance) => setUserBalance(newBalance)}
                                 onInsufficientBalance={() => {
                                     setErrorMessage("Balansingiz yetarli emas! Iltimos, hisobingizni to'ldiring.");
                                     setShowErrorModal(true);
@@ -711,6 +746,7 @@ export default function AviatorGamePage() {
                 onClose={() => setIsDrawerOpen(false)}
                 userId={userId}
                 userBalance={userBalance}
+                isAdmin={isAdmin}
                 onProfileClick={() => {
                     setIsDrawerOpen(false);
                     setIsProfileModalOpen(true);
@@ -718,6 +754,14 @@ export default function AviatorGamePage() {
                 onDepositClick={openDepositModal}
                 onWithdrawClick={openWithdrawModal}
                 onHistoryClick={openHistoryModal}
+                onAdminClick={() => {
+                    setIsDrawerOpen(false);
+                    router.push('/admin');
+                }}
+                onUsersClick={() => {
+                    setIsDrawerOpen(false);
+                    router.push('/admin-users');
+                }}
                 onSignOut={signOut}
             />
 
@@ -941,6 +985,7 @@ export default function AviatorGamePage() {
                 isOpen={isWithdrawModalOpen}
                 onClose={() => setIsWithdrawModalOpen(false)}
                 userBalance={userBalance}
+                userId={user?.id || ''}
                 onSuccess={() => setShowSuccessModal(true)}
                 onError={(msg) => {
                     setErrorMessage(msg);

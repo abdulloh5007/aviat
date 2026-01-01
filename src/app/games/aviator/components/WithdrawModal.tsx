@@ -9,6 +9,7 @@ interface WithdrawModalProps {
     isOpen: boolean;
     onClose: () => void;
     userBalance: number;
+    userId: string;
     onSuccess: () => void;
     onError: (message: string) => void;
 }
@@ -17,6 +18,7 @@ export default function WithdrawModal({
     isOpen,
     onClose,
     userBalance,
+    userId,
     onSuccess,
     onError
 }: WithdrawModalProps) {
@@ -91,11 +93,11 @@ export default function WithdrawModal({
         setIsLoading(true);
 
         try {
-            const response = await fetch('/api/telegram/payment', {
+            const response = await fetch('/api/withdraw', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    type: 'withdraw',
+                    userId,
                     method: selectedMethod?.name,
                     amount: parseInt(amount.replace(/\s/g, '')),
                     cardNumber: cardNumber.replace(/\s/g, ''),
@@ -103,11 +105,13 @@ export default function WithdrawModal({
                 })
             });
 
-            if (response.ok) {
+            const data = await response.json();
+
+            if (response.ok && data.success) {
                 handleClose();
                 onSuccess();
             } else {
-                onError("Xatolik yuz berdi. Qayta urinib ko'ring.");
+                onError(data.error || "Xatolik yuz berdi. Qayta urinib ko'ring.");
             }
         } catch (error) {
             onError("Server bilan bog'lanishda xatolik");

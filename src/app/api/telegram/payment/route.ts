@@ -1,87 +1,148 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GROUP_ID = process.env.GROUP_ID;
 
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 export async function POST(request: NextRequest) {
     try {
-        const formData = await request.formData();
-        const userId = formData.get('userId') as string;
-        const method = formData.get('method') as string;
-        const amount = formData.get('amount') as string;
-        const file = formData.get('file') as File | null;
+        const contentType = request.headers.get('content-type') || '';
+
+        let userId: string = '';
+        let method: string = '';
+        let amount: string = '';
+        let paymentRequestId: string = '';
+        let file: File | null = null;
+        let type: string = '';
+        let cardNumber: string = '';
+        let cardExpiry: string = '';
+
+        // Handle both FormData and JSON
+        if (contentType.includes('multipart/form-data')) {
+            const formData = await request.formData();
+            userId = formData.get('userId') as string || '';
+            method = formData.get('method') as string || '';
+            amount = formData.get('amount') as string || '';
+            paymentRequestId = formData.get('paymentRequestId') as string || '';
+            file = formData.get('file') as File | null;
+        } else {
+            const json = await request.json();
+            userId = json.userId || '';
+            method = json.method || '';
+            amount = json.amount?.toString() || '';
+            type = json.type || '';
+            cardNumber = json.cardNumber || '';
+            cardExpiry = json.cardExpiry || '';
+        }
 
         if (!BOT_TOKEN || !GROUP_ID) {
             console.error('Telegram credentials not configured');
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
 
-        const message = `💰 *Yangi to'lov so'rovi!*
-
-👤 *User ID:* \`${userId}\`
-💳 *To'lov usuli:* ${method?.toUpperCase() || 'Noma\'lum'}
-💵 *Summa:* ${amount ? Number(amount).toLocaleString('uz-UZ') : '0'} UZS
-📅 *Sana:* ${new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' })}
-
-✅ *Foydalanuvchi to'lovni tasdiqladi*`;
-
-        // If file is provided, send with photo/document
-        if (file) {
-            const fileBuffer = await file.arrayBuffer();
-            const blob = new Blob([fileBuffer], { type: file.type });
-
-            const telegramFormData = new FormData();
-            telegramFormData.append('chat_id', GROUP_ID);
-            telegramFormData.append('caption', message);
-            telegramFormData.append('parse_mode', 'Markdown');
-
-            // Check if it's an image or document
-            if (file.type.startsWith('image/')) {
-                telegramFormData.append('photo', blob, file.name);
-                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-                    method: 'POST',
-                    body: telegramFormData,
-                });
-                const result = await response.json();
-                if (!result.ok) {
-                    console.error('Telegram API error:', result);
-                    return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 });
+        // Get short user_id from profiles
+        let shortUserId = userId;
+        if (userId) {
+            try {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('user_id')
+                    .eq('id', userId)
+                    .single();
+                if (profile?.user_id) {
+                    shortUserId = profile.user_id;
                 }
-            } else {
-                telegramFormData.append('document', blob, file.name);
-                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
-                    method: 'POST',
-                    body: telegramFormData,
-                });
-                const result = await response.json();
-                if (!result.ok) {
-                    console.error('Telegram API error:', result);
-                    return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 });
-                }
-            }
-        } else {
-            // Send just the message if no file
-            const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: GROUP_ID,
-                    text: message,
-                    parse_mode: 'Markdown',
-                }),
-            });
-            const result = await response.json();
-            if (!result.ok) {
-                console.error('Telegram API error:', result);
-                return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 });
+            } catch (err) {
+                console.error('Error fetching user profile:', err);
             }
         }
 
+        // Build message based on type
+        const methodDisplay = method?.toUpperCase() || 'Nomalum';
+        const amountDisplay = amount ? Number(amount).toLocaleString('uz-UZ') : '0';
+        const dateDisplay = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+
+        let message: string;
+        if (type === 'withdraw') {
+            message = `💸 *Pul chiqarish so'rovi!*
+
+👤 *User ID:* \`${shortUserId}\`
+💳 *Usul:* ${methodDisplay}
+💵 *Summa:* ${amountDisplay} UZS
+💳 *Karta:* \`${cardNumber}\`
+📅 *Muddat:* ${cardExpiry}
+📅 *Sana:* ${dateDisplay}`;
+        } else {
+            message = `💰 *Yangi to'lov so'rovi!*
+
+👤 *User ID:* \`${shortUserId}\`
+💳 *To'lov usuli:* ${methodDisplay}
+💵 *Summa:* ${amountDisplay} UZS
+📅 *Sana:* ${dateDisplay}
+
+✅ *Foydalanuvchi to'lovni tasdiqladi*`;
+        }
+
+        // Send Telegram notification (non-blocking with timeout)
+        const sendTelegramNotification = async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+            try {
+                if (file) {
+                    const fileBuffer = await file.arrayBuffer();
+                    const blob = new Blob([fileBuffer], { type: file.type });
+
+                    const telegramFormData = new FormData();
+                    telegramFormData.append('chat_id', GROUP_ID!);
+                    telegramFormData.append('caption', message);
+                    telegramFormData.append('parse_mode', 'Markdown');
+
+                    if (file.type.startsWith('image/')) {
+                        telegramFormData.append('photo', blob, file.name);
+                        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                            method: 'POST',
+                            body: telegramFormData,
+                            signal: controller.signal
+                        });
+                    } else {
+                        telegramFormData.append('document', blob, file.name);
+                        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+                            method: 'POST',
+                            body: telegramFormData,
+                            signal: controller.signal
+                        });
+                    }
+                } else {
+                    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: GROUP_ID,
+                            text: message,
+                            parse_mode: 'Markdown'
+                        }),
+                        signal: controller.signal
+                    });
+                }
+            } catch (err) {
+                console.error('Telegram notification error:', err);
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        };
+
+        // Fire and forget - don't block the response
+        sendTelegramNotification().catch(err => console.error('Telegram send failed:', err));
+
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error('Error sending payment notification:', error);
+        console.error('Error in payment notification:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
