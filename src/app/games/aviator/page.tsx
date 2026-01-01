@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Loader2, X, Shield, Copy, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useGameSync } from '@/hooks/useGameSync';
 
 // Import local components
 import { GameHeader, HistoryBar, SideDrawer, BettingCard, WithdrawModal, ErrorModal, SuccessModal } from './components';
@@ -98,6 +99,28 @@ export default function AviatorGamePage() {
 
     // Ref to prevent duplicate saves
     const lastSavedMultiplier = useRef<number | null>(null);
+
+    // Sync with server (Supabase Realtime)
+    const syncState = useGameSync();
+    const useSyncMode = syncState.isConnected && syncState.roundId > 0;
+
+    // Sync state from server when connected
+    useEffect(() => {
+        if (useSyncMode) {
+            setGameState(syncState.gameState);
+            setCurrentMultiplier(syncState.currentMultiplier);
+            setCountdownSeconds(syncState.countdownSeconds);
+            setCountdownProgress(syncState.countdownProgress);
+
+            // Update history when round crashes
+            if (syncState.gameState === 'crashed' && syncState.crashPoint > 0) {
+                if (lastSavedMultiplier.current !== syncState.crashPoint) {
+                    lastSavedMultiplier.current = syncState.crashPoint;
+                    setMultiplierHistory(h => [syncState.crashPoint, ...h.slice(0, 29)]);
+                }
+            }
+        }
+    }, [useSyncMode, syncState]);
 
     // Redirect to home if not authenticated
     useEffect(() => {
@@ -255,11 +278,11 @@ export default function AviatorGamePage() {
 
 
 
-    // Process fake bet cashouts during flying
-
-
-    // Game Loop (User Mode Only)
+    // Game Loop (Local Mode Only - skipped when using sync mode)
     useEffect(() => {
+        // Skip local game loop if using server sync
+        if (useSyncMode) return;
+
         let isActive = true;
         let countdownInterval: NodeJS.Timeout | null = null;
         let flyInterval: NodeJS.Timeout | null = null;
@@ -383,7 +406,7 @@ export default function AviatorGamePage() {
             if (flyInterval) clearInterval(flyInterval);
             if (restartTimeout) clearTimeout(restartTimeout);
         };
-    }, []);
+    }, [useSyncMode]);
 
     // Modal handlers
     const openDepositModal = useCallback(() => {
@@ -659,17 +682,33 @@ export default function AviatorGamePage() {
                         {/* Flying State - Center Multiplier Display */}
                         {gameState === 'flying' && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-                                {/* Soft circular glow behind multiplier */}
-                                <div className={`absolute w-32 h-32 rounded-full blur-3xl opacity-40 transition-colors duration-500 ${currentMultiplier >= 100 ? 'bg-[#ec4899]' :
-                                    currentMultiplier >= 10 ? 'bg-[#a855f7]' :
-                                        currentMultiplier >= 2 ? 'bg-[#3b82f6]' :
-                                            'bg-[#5ce85c]'
-                                    }`} />
-                                <div className={`text-6xl sm:text-7xl font-bold transition-colors duration-500 ${currentMultiplier >= 100 ? 'text-[#ec4899] drop-shadow-[0_0_30px_rgba(236,72,153,0.5)]' :
-                                    currentMultiplier >= 10 ? 'text-[#a855f7] drop-shadow-[0_0_30px_rgba(168,85,247,0.5)]' :
-                                        currentMultiplier >= 2 ? 'text-[#3b82f6] drop-shadow-[0_0_30px_rgba(59,130,246,0.5)]' :
-                                            'text-[#5ce85c] drop-shadow-[0_0_30px_rgba(92,232,92,0.5)]'
-                                    }`}>
+                                {/* Soft radial glow behind multiplier - cross-browser compatible */}
+                                <div
+                                    className="absolute w-48 h-48 rounded-full opacity-30"
+                                    style={{
+                                        background: currentMultiplier >= 100
+                                            ? 'radial-gradient(circle, #ec4899 0%, transparent 70%)'
+                                            : currentMultiplier >= 10
+                                                ? 'radial-gradient(circle, #a855f7 0%, transparent 70%)'
+                                                : currentMultiplier >= 2
+                                                    ? 'radial-gradient(circle, #3b82f6 0%, transparent 70%)'
+                                                    : 'radial-gradient(circle, #5ce85c 0%, transparent 70%)'
+                                    }}
+                                />
+                                <div className={`text-6xl sm:text-7xl font-bold transition-colors duration-300 ${currentMultiplier >= 100 ? 'text-[#ec4899]' :
+                                    currentMultiplier >= 10 ? 'text-[#a855f7]' :
+                                        currentMultiplier >= 2 ? 'text-[#3b82f6]' :
+                                            'text-[#5ce85c]'
+                                    }`}
+                                    style={{
+                                        textShadow: currentMultiplier >= 100
+                                            ? '0 0 30px rgba(236,72,153,0.6)'
+                                            : currentMultiplier >= 10
+                                                ? '0 0 30px rgba(168,85,247,0.6)'
+                                                : currentMultiplier >= 2
+                                                    ? '0 0 30px rgba(59,130,246,0.6)'
+                                                    : '0 0 30px rgba(92,232,92,0.6)'
+                                    }}>
                                     {currentMultiplier.toFixed(2)}x
                                 </div>
                             </div>
@@ -678,18 +717,34 @@ export default function AviatorGamePage() {
                         {/* Crashed State */}
                         {gameState === 'crashed' && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-                                {/* Soft circular glow behind multiplier - same color as flying */}
-                                <div className={`absolute w-32 h-32 rounded-full blur-3xl opacity-40 ${currentMultiplier >= 100 ? 'bg-[#ec4899]' :
-                                    currentMultiplier >= 10 ? 'bg-[#a855f7]' :
-                                        currentMultiplier >= 2 ? 'bg-[#3b82f6]' :
-                                            'bg-[#5ce85c]'
-                                    }`} />
+                                {/* Soft radial glow behind multiplier - cross-browser compatible */}
+                                <div
+                                    className="absolute w-48 h-48 rounded-full opacity-30"
+                                    style={{
+                                        background: currentMultiplier >= 100
+                                            ? 'radial-gradient(circle, #ec4899 0%, transparent 70%)'
+                                            : currentMultiplier >= 10
+                                                ? 'radial-gradient(circle, #a855f7 0%, transparent 70%)'
+                                                : currentMultiplier >= 2
+                                                    ? 'radial-gradient(circle, #3b82f6 0%, transparent 70%)'
+                                                    : 'radial-gradient(circle, #5ce85c 0%, transparent 70%)'
+                                    }}
+                                />
                                 <p className="text-white text-lg mb-2 font-medium">Uchib ketti</p>
-                                <div className={`text-6xl sm:text-7xl font-bold transition-colors duration-500 ${currentMultiplier >= 100 ? 'text-[#ec4899] drop-shadow-[0_0_30px_rgba(236,72,153,0.5)]' :
-                                    currentMultiplier >= 10 ? 'text-[#a855f7] drop-shadow-[0_0_30px_rgba(168,85,247,0.5)]' :
-                                        currentMultiplier >= 2 ? 'text-[#3b82f6] drop-shadow-[0_0_30px_rgba(59,130,246,0.5)]' :
-                                            'text-[#5ce85c] drop-shadow-[0_0_30px_rgba(92,232,92,0.5)]'
-                                    }`}>
+                                <div className={`text-6xl sm:text-7xl font-bold ${currentMultiplier >= 100 ? 'text-[#ec4899]' :
+                                    currentMultiplier >= 10 ? 'text-[#a855f7]' :
+                                        currentMultiplier >= 2 ? 'text-[#3b82f6]' :
+                                            'text-[#5ce85c]'
+                                    }`}
+                                    style={{
+                                        textShadow: currentMultiplier >= 100
+                                            ? '0 0 30px rgba(236,72,153,0.6)'
+                                            : currentMultiplier >= 10
+                                                ? '0 0 30px rgba(168,85,247,0.6)'
+                                                : currentMultiplier >= 2
+                                                    ? '0 0 30px rgba(59,130,246,0.6)'
+                                                    : '0 0 30px rgba(92,232,92,0.6)'
+                                    }}>
                                     {currentMultiplier.toFixed(2)}x
                                 </div>
                             </div>

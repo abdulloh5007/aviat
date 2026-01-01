@@ -96,16 +96,15 @@ const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ gameState, currentMultipl
     }, []);
 
     const drawGameScene = (ctx: CanvasRenderingContext2D, width: number, height: number, multiplier: number, state: string) => {
-        // Non-linear progress: slow until 3x, then logarithmic (counter accelerates but plane stays slow)
+        // Non-linear progress: faster at start, then logarithmic
         let progress: number;
         if (multiplier <= 3.0) {
-            // From 1.0x to 3.0x: progress goes 0 to 0.6 (slow, linear)
-            progress = ((multiplier - 1.0) / 2.0) * 0.6;
+            // From 1.0x to 3.0x: progress goes 0 to 0.7 (faster than before)
+            progress = ((multiplier - 1.0) / 2.0) * 0.7;
         } else {
             // After 3.0x: logarithmic scale (plane barely moves, counter can go crazy)
-            // At 3x: 0.6, at 10x: ~0.75, at 50x: ~0.9, at 100x: ~0.95
-            const logProgress = Math.log10(multiplier - 2) / Math.log10(100); // 0 at 3x, 1 at 102x
-            progress = 0.6 + 0.4 * Math.min(logProgress, 1);
+            const logProgress = Math.log10(multiplier - 2) / Math.log10(100);
+            progress = 0.7 + 0.3 * Math.min(logProgress, 1);
         }
         progress = Math.min(progress, 1);
 
@@ -215,7 +214,8 @@ const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ gameState, currentMultipl
                 ctx.shadowBlur = 10;
                 ctx.shadowOffsetY = 10;
 
-                ctx.drawImage(planeImageRef.current, -40, -20, 80, 40);
+                // Draw plane bigger
+                ctx.drawImage(planeImageRef.current, -60, -30, 120, 60);
                 ctx.restore();
             }
         }
