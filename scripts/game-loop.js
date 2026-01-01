@@ -61,11 +61,26 @@ async function sendSignal(crashPoint) {
     }
 }
 
+// Сохранение истории раунда в БД
+async function saveRoundHistory(multiplier) {
+    try {
+        await fetch(`${API_URL}/api/game/history`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ multiplier, adminKey: GAME_ADMIN_KEY })
+        });
+        console.log(`📊 History saved: ${multiplier}x`);
+    } catch (error) {
+        console.error('History save error:', error.message);
+    }
+}
+
 async function gameLoop() {
     console.log('🎮 Starting game loop...');
     console.log(`   API URL: ${API_URL}`);
 
     let lastRoundId = 0;
+    let lastCrashedRound = 0;
 
     while (true) {
         const state = await getState();
@@ -94,7 +109,14 @@ async function gameLoop() {
             case 'flying':
                 const result = await callApi('tick');
                 if (result?.state?.phase === 'crashed') {
-                    console.log(`💥 Round ${state.round_id}: Crashed at ${result.state.multiplier}x`);
+                    const crashedMultiplier = result.state.multiplier;
+                    console.log(`💥 Round ${state.round_id}: Crashed at ${crashedMultiplier}x`);
+
+                    // Сохранить в историю только один раз
+                    if (state.round_id !== lastCrashedRound) {
+                        lastCrashedRound = state.round_id;
+                        saveRoundHistory(crashedMultiplier);
+                    }
                 }
                 await sleep(TICK_INTERVAL);
                 break;

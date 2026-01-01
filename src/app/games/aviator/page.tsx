@@ -112,12 +112,9 @@ export default function AviatorGamePage() {
             setCountdownSeconds(syncState.countdownSeconds);
             setCountdownProgress(syncState.countdownProgress);
 
-            // Update history when round crashes
-            if (syncState.gameState === 'crashed' && syncState.crashPoint > 0) {
-                if (lastSavedMultiplier.current !== syncState.crashPoint) {
-                    lastSavedMultiplier.current = syncState.crashPoint;
-                    setMultiplierHistory(h => [syncState.crashPoint, ...h.slice(0, 29)]);
-                }
+            // Sync history from server
+            if (syncState.history.length > 0) {
+                setMultiplierHistory(syncState.history);
             }
         }
     }, [useSyncMode, syncState]);
@@ -313,12 +310,7 @@ export default function AviatorGamePage() {
             let targetValue = parseFloat(generateMultiplier().toFixed(2));
             setTargetMultiplier(targetValue);
 
-            // Send signal to Telegram at START of round (during waiting phase)
-            fetch('/api/telegram/game-signal', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ multiplier: targetValue })
-            }).catch(() => { }); // Fire and forget
+            // Note: Signal is sent from game-loop.js in sync mode
 
             let countdown = 5;
             setCountdownSeconds(countdown);

@@ -22,6 +22,7 @@ interface UseGameSyncReturn {
     isConnected: boolean;
     countdownSeconds: number;
     countdownProgress: number;
+    history: number[];
 }
 
 export function useGameSync(): UseGameSyncReturn {
@@ -30,10 +31,54 @@ export function useGameSync(): UseGameSyncReturn {
     const [isConnected, setIsConnected] = useState(false);
     const [countdownSeconds, setCountdownSeconds] = useState(5);
     const [countdownProgress, setCountdownProgress] = useState(100);
+    const [history, setHistory] = useState<number[]>([]);
 
     const channelRef = useRef<RealtimeChannel | null>(null);
     const animationRef = useRef<number | null>(null);
     const phaseStartRef = useRef<number>(Date.now());
+    const lastRoundRef = useRef<number>(0);
+
+    // Загрузка истории из БД
+    const loadHistory = useCallback(async () => {
+        try {
+            const { data } = await supabase
+                .from('game_rounds')
+                .select('multiplier')
+                .order('created_at', { ascending: false })
+                .limit(30);
+
+            if (data && data.length > 0) {
+                setHistory(data.map(r => r.multiplier));
+            }
+        } catch (err) {
+            // Silent fail
+        }
+    }, []);
+
+    // Получение текущего состояния с сервера
+    const fetchState = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('game_state')
+                .select('*')
+                .order('updated_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (data && !error) {
+                setServerState(data as GameState);
+                setIsConnected(true);
+
+                // Если раунд изменился, обновляем историю
+                if (data.round_id !== lastRoundRef.current) {
+                    lastRoundRef.current = data.round_id;
+                    loadHistory();
+                }
+            }
+        } catch (err) {
+            console.warn('Game state not available');
+        }
+    }, [loadHistory]);
 
     // Локальная интерполяция множителя для плавности
     const interpolateMultiplier = useCallback(() => {
@@ -42,8 +87,6 @@ export function useGameSync(): UseGameSyncReturn {
         }
 
         const elapsed = (Date.now() - phaseStartRef.current) / 1000;
-
-        // Та же формула что и в game-loop
         const newMultiplier = Math.pow(1.06, elapsed);
 
         if (serverState.crash_point && newMultiplier >= serverState.crash_point) {
@@ -69,6 +112,11 @@ export function useGameSync(): UseGameSyncReturn {
 
             if (serverState.phase === 'crashed') {
                 setLocalMultiplier(serverState.crash_point || serverState.multiplier);
+                // Добавляем в историю при краше
+                if (serverState.crash_point && serverState.round_id !== lastRoundRef.current) {
+                    lastRoundRef.current = serverState.round_id;
+                    setHistory(h => [serverState.crash_point, ...h.slice(0, 29)]);
+                }
             } else if (serverState.phase === 'waiting') {
                 setLocalMultiplier(1.00);
             }
@@ -79,7 +127,7 @@ export function useGameSync(): UseGameSyncReturn {
                 cancelAnimationFrame(animationRef.current);
             }
         };
-    }, [serverState?.phase, interpolateMultiplier]);
+    }, [serverState?.phase, serverState?.round_id, interpolateMultiplier]);
 
     // Countdown для waiting фазы
     useEffect(() => {
@@ -88,7 +136,7 @@ export function useGameSync(): UseGameSyncReturn {
         }
 
         const startTime = new Date(serverState.phase_start_at).getTime();
-        const waitDuration = 5000; // 5 секунд
+        const waitDuration = 5000;
 
         const updateCountdown = () => {
             const elapsed = Date.now() - startTime;
@@ -106,27 +154,33 @@ export function useGameSync(): UseGameSyncReturn {
         return () => clearInterval(interval);
     }, [serverState?.phase, serverState?.phase_start_at]);
 
-    // Подписка на Realtime
+    // Пересинхронизация при возвращении на вкладку
     useEffect(() => {
-        const fetchInitialState = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from('game_state')
-                    .select('*')
-                    .order('updated_at', { ascending: false })
-                    .limit(1)
-                    .single();
-
-                if (data && !error) {
-                    setServerState(data as GameState);
-                    setIsConnected(true);
-                }
-            } catch (err) {
-                console.warn('Game state not available, using local mode');
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // Пользователь вернулся - пересинхронизировать
+                fetchState();
             }
         };
 
-        fetchInitialState();
+        const handleFocus = () => {
+            // При фокусе тоже пересинхронизировать
+            fetchState();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [fetchState]);
+
+    // Подписка на Realtime
+    useEffect(() => {
+        fetchState();
+        loadHistory();
 
         channelRef.current = supabase
             .channel('game_sync_' + Math.random())
@@ -153,7 +207,7 @@ export function useGameSync(): UseGameSyncReturn {
                 supabase.removeChannel(channelRef.current);
             }
         };
-    }, []);
+    }, [fetchState, loadHistory]);
 
     return {
         gameState: serverState?.phase || 'waiting',
@@ -162,6 +216,7 @@ export function useGameSync(): UseGameSyncReturn {
         roundId: serverState?.round_id || 0,
         isConnected,
         countdownSeconds,
-        countdownProgress
+        countdownProgress,
+        history
     };
 }
