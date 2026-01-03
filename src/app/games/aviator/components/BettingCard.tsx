@@ -48,6 +48,11 @@ export default function BettingCard({
     const [isProcessing, setIsProcessing] = useState(false);
     const [potentialWin, setPotentialWin] = useState(0);
 
+    // Bet validation states
+    const [betError, setBetError] = useState<string | null>(null);
+    const MIN_BET = 1000;
+    const MAX_BET = 10000000;
+
     // Toast notifications - array for multiple toasts
     interface ToastItem {
         id: number;
@@ -274,9 +279,11 @@ export default function BettingCard({
             return {
                 text: 'Pul tikish',
                 subtext: `${formatAmount(betAmount)} UZS`,
-                className: 'bg-[#27b82c] hover:bg-[#2ed134] border-[#1e9122] shadow-[0_0_20px_rgba(39,184,44,0.3)]',
+                className: betError
+                    ? 'bg-gray-600 border-gray-700 cursor-not-allowed'
+                    : 'bg-[#27b82c] hover:bg-[#2ed134] border-[#1e9122] shadow-[0_0_20px_rgba(39,184,44,0.3)]',
                 onClick: handlePlaceBet,
-                disabled: isProcessing
+                disabled: isProcessing || !!betError
             };
         }
 
@@ -364,25 +371,60 @@ export default function BettingCard({
                     {/* Left: Amount Controls */}
                     <div className="flex-1 space-y-2">
                         {/* Amount Input */}
-                        <div className="flex items-center gap-1 bg-black/60 rounded-lg p-1 border border-gray-700">
+                        <div className={`flex items-center gap-1 bg-black/60 rounded-lg p-1 border transition-colors ${betError ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-700'}`}>
                             <button
                                 className="w-8 h-8 flex items-center justify-center bg-[#2c2c2c] rounded-md text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-colors disabled:opacity-50"
-                                onClick={() => setBetAmount(Math.max(1000, betAmount - 1000))}
+                                onClick={() => {
+                                    const newAmount = Math.max(MIN_BET, betAmount - 1000);
+                                    setBetAmount(newAmount);
+                                    setBetError(null);
+                                }}
                                 disabled={!!activeBet}
                             >
                                 <Minus size={14} />
                             </button>
-                            <div className="flex-1 text-center font-bold text-white text-lg">
-                                {formatAmount(betAmount)}
-                            </div>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                value={formatAmount(betAmount)}
+                                onChange={(e) => {
+                                    const value = e.target.value.replace(/[^\d]/g, '');
+                                    const numValue = parseInt(value) || 0;
+
+                                    // Always update the value to show what user typed
+                                    setBetAmount(numValue);
+
+                                    // Validate and show error
+                                    if (numValue < MIN_BET) {
+                                        setBetError(`Minimal stavka ${formatAmount(MIN_BET)} UZS`);
+                                    } else if (numValue > MAX_BET) {
+                                        setBetError(`Maksimal stavka ${formatAmount(MAX_BET)} UZS`);
+                                    } else {
+                                        setBetError(null);
+                                    }
+                                }}
+                                disabled={!!activeBet}
+                                className={`flex-1 text-center font-bold text-lg bg-transparent outline-none disabled:opacity-50 ${betError ? 'text-red-400' : 'text-white'}`}
+                            />
                             <button
                                 className="w-8 h-8 flex items-center justify-center bg-[#2c2c2c] rounded-md text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-colors disabled:opacity-50"
-                                onClick={() => setBetAmount(betAmount + 1000)}
+                                onClick={() => {
+                                    const newAmount = Math.min(MAX_BET, betAmount + 1000);
+                                    setBetAmount(newAmount);
+                                    setBetError(null);
+                                }}
                                 disabled={!!activeBet}
                             >
                                 <Plus size={14} />
                             </button>
                         </div>
+
+                        {/* Error message */}
+                        {betError && (
+                            <div className="text-red-400 text-xs text-center py-1 bg-red-500/10 rounded border border-red-500/30">
+                                {betError}
+                            </div>
+                        )}
 
                         {/* Presets */}
                         <div className="grid grid-cols-2 gap-1.5">
