@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useGameSync } from '@/hooks/useGameSync';
 
 // Import local components
-import { GameHeader, HistoryBar, SideDrawer, BettingCard, WithdrawModal, ErrorModal, SuccessModal } from './components';
+import { GameHeader, HistoryBar, SideDrawer, BettingCard, WithdrawModal, ProfileModal, TafsilotModal, ErrorModal, SuccessModal } from './components';
 
 // Import constants and types
 import {
@@ -1054,6 +1054,25 @@ export default function AviatorGamePage() {
                     setErrorMessage(msg);
                     setShowErrorModal(true);
                 }}
+            />
+
+            {/* Profile Modal */}
+            <ProfileModal
+                isOpen={isProfileModalOpen}
+                onClose={() => setIsProfileModalOpen(false)}
+                userId={userId}
+                userPhone={userPhone}
+                userEmail={userEmail}
+                balances={balances}
+                onDepositClick={openDepositModal}
+                onWithdrawClick={openWithdrawModal}
+            />
+
+            {/* Tafsilot Modal */}
+            <TafsilotModal
+                isOpen={isHistoryModalOpen}
+                onClose={() => setIsHistoryModalOpen(false)}
+                userId={user?.id || ''}
             />
 
             {/* Success Modal */}

@@ -96,10 +96,15 @@ export default function SideDrawer({
                         <span className="text-gray-800 font-medium">Bildirishnomalar</span>
                     </button>
 
-                    <button className="w-full flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <a
+                        href={`https://t.me/${process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM || 'aviatorwinn_support'}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors"
+                    >
                         <HeadphonesIcon size={22} className="text-gray-500" />
                         <span className="text-gray-800 font-medium">Texnik yordam</span>
-                    </button>
+                    </a>
 
                     {/* Admin Section */}
                     {isAdmin && (

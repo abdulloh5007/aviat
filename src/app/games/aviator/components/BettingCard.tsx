@@ -367,13 +367,13 @@ export default function BettingCard({
                     </button>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 overflow-hidden">
                     {/* Left: Amount Controls */}
-                    <div className="flex-1 space-y-2">
+                    <div className="flex-1 min-w-0 space-y-2">
                         {/* Amount Input */}
                         <div className={`flex items-center gap-1 bg-black/60 rounded-lg p-1 border transition-colors ${betError ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-700'}`}>
                             <button
-                                className="w-8 h-8 flex items-center justify-center bg-[#2c2c2c] rounded-md text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-colors disabled:opacity-50"
+                                className="shrink-0 w-8 h-8 flex items-center justify-center bg-[#2c2c2c] rounded-md text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-colors disabled:opacity-50"
                                 onClick={() => {
                                     const newAmount = Math.max(MIN_BET, betAmount - 1000);
                                     setBetAmount(newAmount);
@@ -404,10 +404,10 @@ export default function BettingCard({
                                     }
                                 }}
                                 disabled={!!activeBet}
-                                className={`flex-1 text-center font-bold text-lg bg-transparent outline-none disabled:opacity-50 ${betError ? 'text-red-400' : 'text-white'}`}
+                                className={`flex-1 min-w-0 text-center font-bold text-lg bg-transparent outline-none disabled:opacity-50 ${betError ? 'text-red-400' : 'text-white'}`}
                             />
                             <button
-                                className="w-8 h-8 flex items-center justify-center bg-[#2c2c2c] rounded-md text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-colors disabled:opacity-50"
+                                className="shrink-0 w-8 h-8 flex items-center justify-center bg-[#2c2c2c] rounded-md text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-colors disabled:opacity-50"
                                 onClick={() => {
                                     const newAmount = Math.min(MAX_BET, betAmount + 1000);
                                     setBetAmount(newAmount);
@@ -421,7 +421,7 @@ export default function BettingCard({
 
                         {/* Error message */}
                         {betError && (
-                            <div className="text-red-400 text-xs text-center py-1 bg-red-500/10 rounded border border-red-500/30">
+                            <div className="text-red-400 text-xs text-center py-0.5 px-1 bg-red-500/10 rounded border border-red-500/30 truncate">
                                 {betError}
                             </div>
                         )}
@@ -454,7 +454,7 @@ export default function BettingCard({
 
                     {/* Right: Big Bet Button */}
                     <button
-                        className={`flex flex-col items-center justify-center w-36 sm:w-48 rounded-xl border-b-4 active:border-b-0 active:translate-y-1 transition-all ${buttonContent.className}`}
+                        className={`flex flex-col items-center justify-center min-w-[140px] w-36 sm:w-44 md:w-48 shrink-0 rounded-xl border-b-4 active:border-b-0 active:translate-y-1 transition-all ${buttonContent.className}`}
                         onClick={buttonContent.onClick}
                         disabled={buttonContent.disabled}
                     >
