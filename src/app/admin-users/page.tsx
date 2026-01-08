@@ -71,7 +71,7 @@ export default function AdminUsersPage() {
                 const response = await fetch('/api/admin/check', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: user.id })
+                    body: JSON.stringify({ authId: user.id })
                 });
                 const data = await response.json();
 

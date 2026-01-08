@@ -155,7 +155,10 @@ export default function AviatorGamePage() {
                     const response = await fetch('/api/admin/check', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: user.id })
+                        body: JSON.stringify({
+                            authId: user.id,  // UUID to lookup user_id from profiles
+                            userId: userId     // 6-digit for admins table check
+                        })
                     });
                     const data = await response.json();
                     setIsAdmin(data.isAdmin === true);
@@ -165,7 +168,7 @@ export default function AviatorGamePage() {
             }
         };
         checkAdminStatus();
-    }, [user]);
+    }, [user, userId]);
 
     // Save game round to database
     const saveGameRound = useCallback(async (multiplier: number) => {
