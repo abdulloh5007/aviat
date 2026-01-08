@@ -14,10 +14,13 @@ export const FAKE_NAMES = [
     'Malik', 'Nabi', 'Orif', 'Parvin', 'Quvonch', 'Rahim', 'Saidakbar', 'Timur',
 ];
 
-// Avatar colors
+// Total number of available avatar images in public/avatars
+const AVATAR_COUNT = 30;
+
+// Avatar colors (fallback if no image)
 const AVATAR_COLORS = [
-    'bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500',
-    'bg-pink-500', 'bg-orange-500', 'bg-teal-500', 'bg-indigo-500', 'bg-cyan-500',
+    '#e91e63', '#2196f3', '#4caf50', '#ff9800', '#9c27b0',
+    '#00bcd4', '#ff5722', '#607d8b', '#795548', '#3f51b5',
 ];
 
 export interface FakeBet {
@@ -25,12 +28,37 @@ export interface FakeBet {
     name: string;
     maskedName: string;
     avatar: string;
+    avatarImage?: string;
     avatarColor: string;
     amount: number;
     targetMultiplier: number;
     cashedOut: boolean;
     cashoutMultiplier?: number;
     winAmount: number | null;
+    avatarNum: number; // 1-30 for local avatar files
+}
+
+// Generate truly random bet amount between min and max
+function generateRandomAmount(): number {
+    // Different ranges with different probabilities
+    const rand = Math.random();
+
+    if (rand < 0.15) {
+        // 15% chance: very high bets (2,000,000 - 3,500,000)
+        return Math.floor(2000000 + Math.random() * 1500000);
+    } else if (rand < 0.35) {
+        // 20% chance: high bets (1,000,000 - 2,000,000)
+        return Math.floor(1000000 + Math.random() * 1000000);
+    } else if (rand < 0.60) {
+        // 25% chance: medium bets (500,000 - 1,000,000)
+        return Math.floor(500000 + Math.random() * 500000);
+    } else if (rand < 0.85) {
+        // 25% chance: small-medium bets (100,000 - 500,000)
+        return Math.floor(100000 + Math.random() * 400000);
+    } else {
+        // 15% chance: small bets (10,000 - 100,000)
+        return Math.floor(10000 + Math.random() * 90000);
+    }
 }
 
 // Generate random bets for a round
@@ -45,30 +73,36 @@ export function generateFakeBets(count: number): FakeBet[] {
         }
         usedNames.add(name);
 
-        // Mask name like "4***7" based on first and last char
-        const firstChar = name.charAt(0);
-        const lastChar = name.charAt(name.length - 1);
-        const maskedName = `${firstChar}***${lastChar}`;
+        // Mask name like "2***1" based on random numbers
+        const firstNum = Math.floor(Math.random() * 10);
+        const lastNum = Math.floor(Math.random() * 10);
+        const maskedName = `${firstNum}***${lastNum}`;
 
-        // Random bet amount
-        const amounts = [10000, 50000, 100000, 250000, 500000, 900000, 1500000, 2500000];
-        const amount = amounts[Math.floor(Math.random() * amounts.length)];
+        // Generate truly random bet amount
+        const amount = generateRandomAmount();
 
         // Random target multiplier
         let targetMultiplier: number;
-        if (Math.random() < 0.3) {
-            targetMultiplier = 100 + Math.random() * 900;
+        if (Math.random() < 0.25) {
+            // 25% chance: high multiplier target (won't often be reached)
+            targetMultiplier = 5 + Math.random() * 10;
+        } else if (Math.random() < 0.4) {
+            // 15% chance: medium-high multiplier
+            targetMultiplier = 3 + Math.random() * 2;
         } else {
-            targetMultiplier = 1.1 + Math.random() * 3.9;
+            // 60% chance: normal multiplier range
+            targetMultiplier = 1.2 + Math.random() * 2.8;
         }
 
         const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+        const avatarNum = Math.floor(Math.random() * AVATAR_COUNT) + 1; // 1-30
 
         bets.push({
-            id: `fake-${i}-${Date.now()}`,
+            id: `fake-${i}-${Date.now()}-${Math.random()}`,
             name,
             maskedName,
             avatar: name.charAt(0).toUpperCase(),
+            avatarNum,
             avatarColor,
             amount,
             targetMultiplier: parseFloat(targetMultiplier.toFixed(2)),
@@ -80,7 +114,7 @@ export function generateFakeBets(count: number): FakeBet[] {
     return bets;
 }
 
-// Format amount with spaces
+// Format amount with commas
 const formatAmount = (value: number): string => {
     return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 };
@@ -106,9 +140,9 @@ const BetsList = React.memo(({ bets }: { bets: FakeBet[] }) => {
     }), [bets]);
 
     return (
-        <div className="min-w-[400px]">
+        <div className="min-w-[360px]">
             {sortedBets.length === 0 ? (
-                <div className="text-gray-500 text-center py-8 text-sm">
+                <div className="text-gray-500 text-center py-8 text-[11px]">
                     Tikishlar kutilmoqda...
                 </div>
             ) : (
@@ -116,38 +150,55 @@ const BetsList = React.memo(({ bets }: { bets: FakeBet[] }) => {
                     {sortedBets.map((bet) => (
                         <div
                             key={bet.id}
-                            className={`grid grid-cols-4 items-center px-3 py-2 border-b border-gray-800/30 ${bet.cashedOut ? 'bg-green-500/5' : ''
+                            className={`grid grid-cols-4 items-center px-2 py-1.5 border-b border-gray-800/20 transition-colors ${bet.cashedOut
+                                ? 'bg-[#1a2e1a] border-l-2 border-l-green-500/50'
+                                : 'hover:bg-gray-800/20'
                                 }`}
                         >
                             {/* Avatar + Name */}
-                            <div className="flex items-center gap-2">
-                                <div className={`w-6 h-6 rounded-full ${bet.avatarColor} flex items-center justify-center text-white text-xs font-bold`}>
-                                    {bet.avatar}
-                                </div>
-                                <span className="text-gray-400 text-sm">{bet.maskedName}</span>
+                            <div className="flex items-center gap-1.5">
+                                <img
+                                    src={`/avatars/avatar_${bet.avatarNum}.jpg`}
+                                    alt=""
+                                    className="w-5 h-5 rounded-full object-cover"
+                                />
+                                <span className={`text-[11px] ${bet.cashedOut ? 'text-green-400' : 'text-gray-400'}`}>
+                                    {bet.maskedName}
+                                </span>
                             </div>
 
                             {/* Bet Amount */}
                             <div className="text-right">
-                                <span className="text-white text-sm">{formatAmount(bet.amount)}</span>
+                                <span className={`text-[11px] ${bet.cashedOut ? 'text-green-300' : 'text-white'}`}>
+                                    {formatAmount(bet.amount)}
+                                </span>
                             </div>
 
-                            {/* Multiplier */}
+                            {/* Multiplier - colored based on value like game counter */}
                             <div className="text-center">
-                                {bet.cashedOut && bet.cashoutMultiplier && (
-                                    <span className="text-purple-400 text-sm font-medium">
+                                {bet.cashedOut && bet.cashoutMultiplier ? (
+                                    <span
+                                        className={`text-[11px] font-semibold px-1.5 py-0.5 rounded ${bet.cashoutMultiplier >= 100
+                                                ? 'text-pink-400 bg-pink-500/10'
+                                                : bet.cashoutMultiplier >= 10
+                                                    ? 'text-purple-400 bg-purple-500/10'
+                                                    : bet.cashoutMultiplier >= 2
+                                                        ? 'text-blue-400 bg-blue-500/10'
+                                                        : 'text-green-400 bg-green-500/10'
+                                            }`}
+                                    >
                                         {bet.cashoutMultiplier.toFixed(2)}x
                                     </span>
-                                )}
+                                ) : null}
                             </div>
 
                             {/* Win Amount */}
                             <div className="text-right">
-                                {bet.cashedOut && bet.winAmount && (
-                                    <span className="text-green-400 text-sm font-medium">
+                                {bet.cashedOut && bet.winAmount ? (
+                                    <span className="text-green-400 text-[11px] font-semibold">
                                         {formatAmount(bet.winAmount)}
                                     </span>
-                                )}
+                                ) : null}
                             </div>
                         </div>
                     ))}
@@ -184,7 +235,7 @@ export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: Be
             <div className="flex border-b border-gray-800">
                 <button
                     onClick={() => setActiveTab('bets')}
-                    className={`flex-1 py-2.5 text-sm font-medium transition-colors ${activeTab === 'bets'
+                    className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'bets'
                         ? 'bg-[#2d2d2d] text-white rounded-tl-xl'
                         : 'text-gray-500 hover:text-gray-300'
                         }`}
@@ -193,7 +244,7 @@ export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: Be
                 </button>
                 <button
                     onClick={() => setActiveTab('previous')}
-                    className={`flex-1 py-2.5 text-sm font-medium transition-colors ${activeTab === 'previous'
+                    className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'previous'
                         ? 'bg-[#2d2d2d] text-white'
                         : 'text-gray-500 hover:text-gray-300'
                         }`}
@@ -202,7 +253,7 @@ export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: Be
                 </button>
                 <button
                     onClick={() => setActiveTab('top')}
-                    className={`flex-1 py-2.5 text-sm font-medium transition-colors ${activeTab === 'top'
+                    className={`flex-1 py-2 text-[11px] font-medium transition-colors ${activeTab === 'top'
                         ? 'bg-[#2d2d2d] text-white rounded-tr-xl'
                         : 'text-gray-500 hover:text-gray-300'
                         }`}
@@ -212,22 +263,41 @@ export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: Be
             </div>
 
             {/* Stats Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 bg-[#0e0e0e]">
-                <div className="flex items-center gap-2">
-                    <div className="flex -space-x-1">
-                        <div className="w-6 h-6 rounded-full bg-red-500 border-2 border-[#1a1a1a]" />
-                        <div className="w-6 h-6 rounded-full bg-blue-500 border-2 border-[#1a1a1a]" />
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-gray-800 bg-[#0e0e0e]">
+                <div className="flex items-center gap-1.5">
+                    <div className="flex -space-x-1.5">
+                        {/* Show top 3 highest bets avatars */}
+                        {[...bets]
+                            .sort((a, b) => b.amount - a.amount)
+                            .slice(0, 3)
+                            .map((bet, index) => (
+                                <img
+                                    key={bet.id}
+                                    src={`/avatars/avatar_${bet.avatarNum}.jpg`}
+                                    alt=""
+                                    className="w-5 h-5 rounded-full border-2 border-[#1a1a1a] object-cover"
+                                    style={{ zIndex: 3 - index }}
+                                />
+                            ))
+                        }
+                        {bets.length === 0 && (
+                            <>
+                                <div className="w-5 h-5 rounded-full bg-gray-700 border-2 border-[#1a1a1a]" />
+                                <div className="w-5 h-5 rounded-full bg-gray-600 border-2 border-[#1a1a1a]" />
+                                <div className="w-5 h-5 rounded-full bg-gray-500 border-2 border-[#1a1a1a]" />
+                            </>
+                        )}
                     </div>
-                    <span className="text-gray-400 text-xs">{activePlayers}/{totalPlayers} Pul tikishlar</span>
+                    <span className="text-gray-400 text-[10px]">{activePlayers}/{totalPlayers} Pul tikishlar</span>
                 </div>
                 <div className="text-right">
-                    <p className="text-white font-bold text-sm">{formatAmount(totalWinnings)}</p>
-                    <p className="text-gray-500 text-xs">Jami yutuq UZS</p>
+                    <p className="text-white font-bold text-[11px]">{formatAmount(totalWinnings)}</p>
+                    <p className="text-gray-500 text-[10px]">Jami yutuq UZS</p>
                 </div>
             </div>
 
             {/* Column Headers */}
-            <div className="grid grid-cols-4 px-3 py-1.5 text-gray-500 text-xs border-b border-gray-800">
+            <div className="grid grid-cols-4 px-2 py-1 text-gray-500 text-[10px] border-b border-gray-800">
                 <span>O&apos;yinchi</span>
                 <span className="text-right">Pul tikish UZS</span>
                 <span className="text-center">X</span>
@@ -240,13 +310,16 @@ export default function BetsPanel({ bets, gameState, currentMultiplier = 1 }: Be
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-3 py-2 border-t border-gray-800 bg-[#0e0e0e]">
-                <div className="flex items-center gap-1 text-gray-500 text-xs">
-                    <span className="w-3 h-3 rounded-full border border-gray-500" />
+            <div className="flex items-center justify-between px-2 py-1.5 border-t border-gray-800 bg-[#0e0e0e]">
+                <div className="flex items-center gap-1 text-gray-500 text-[10px]">
+                    <span className="w-2.5 h-2.5 rounded-full border border-gray-500" />
                     Provably Fair Game
                 </div>
-                <span className="text-gray-600 text-xs">Powered by <span className="text-gray-400">SPRIBE</span></span>
+                <span className="text-gray-600 text-[10px]">Powered by <span className="text-gray-400">SPRIBE</span></span>
             </div>
         </div>
     );
 }
+
+BetsList.displayName = 'BetsList';
+

@@ -265,16 +265,64 @@ export default function AviatorGamePage() {
         return () => clearInterval(interval);
     }, [timeRemaining, currentPaymentRequest]);
 
-    // Generate fake bets gradually when game starts waiting (50-300 players)
+    // Generate fake bets gradually when game starts waiting (50-130 players)
     useEffect(() => {
         if (gameState !== 'waiting') return;
 
-        const targetCount = 50 + Math.floor(Math.random() * 251); // 50 to 300
+        // Clear previous bets and prepare new ones
+        const targetCount = 50 + Math.floor(Math.random() * 81); // 50 to 130 (reduced for performance)
         const allBets = generateFakeBets(targetCount);
 
-        // Show all bets immediately to avoid repeated re-renders causing lag
-        setFakeBets(allBets);
+        // Start with empty array
+        setFakeBets([]);
+
+        // Gradually add bets over 5 seconds in 5 steps (fewer updates = smoother)
+        let currentIndex = 0;
+        const steps = 5;
+        const betsPerStep = Math.ceil(targetCount / steps);
+
+        const interval = setInterval(() => {
+            if (currentIndex >= targetCount) {
+                clearInterval(interval);
+                return;
+            }
+
+            const endIndex = Math.min(currentIndex + betsPerStep, targetCount);
+            setFakeBets(allBets.slice(0, endIndex));
+            currentIndex = endIndex;
+        }, 1000); // Every 1 second (5 steps in 5 seconds - less frequent updates)
+
+        return () => clearInterval(interval);
     }, [gameState]);
+
+    // Simulate cashouts during flying phase (optimized - less frequent checks)
+    useEffect(() => {
+        if (gameState !== 'flying') return;
+
+        // Process cashouts as multiplier increases
+        const cashoutInterval = setInterval(() => {
+            setFakeBets(prevBets => {
+                // Check if any bets need to cash out
+                const needsUpdate = prevBets.some(bet => !bet.cashedOut && currentMultiplier >= bet.targetMultiplier);
+                if (!needsUpdate) return prevBets; // No state change = no re-render
+
+                // Find bets that should cash out at current multiplier
+                return prevBets.map(bet => {
+                    if (!bet.cashedOut && currentMultiplier >= bet.targetMultiplier) {
+                        return {
+                            ...bet,
+                            cashedOut: true,
+                            cashoutMultiplier: bet.targetMultiplier,
+                            winAmount: Math.floor(bet.amount * bet.targetMultiplier)
+                        };
+                    }
+                    return bet;
+                });
+            });
+        }, 200); // Check every 200ms instead of 100ms (less CPU usage)
+
+        return () => clearInterval(cashoutInterval);
+    }, [gameState, currentMultiplier]);
 
 
 

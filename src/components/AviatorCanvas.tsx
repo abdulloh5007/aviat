@@ -96,22 +96,21 @@ const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ gameState, currentMultipl
     }, []);
 
     const drawGameScene = (ctx: CanvasRenderingContext2D, width: number, height: number, multiplier: number, state: string) => {
-        // Non-linear progress: faster at start, then logarithmic
+        // Non-linear progress: faster at start, plane reaches cruise by 2x
         let progress: number;
-        if (multiplier <= 3.0) {
-            // From 1.0x to 3.0x: progress goes 0 to 0.7 (faster than before)
-            progress = ((multiplier - 1.0) / 2.0) * 0.7;
+        if (multiplier <= 2.0) {
+            // From 1.0x to 2.0x: progress goes 0 to 1.0 (plane reaches destination by 2x)
+            progress = (multiplier - 1.0) / 1.0;
         } else {
-            // After 3.0x: logarithmic scale (plane barely moves, counter can go crazy)
-            const logProgress = Math.log10(multiplier - 2) / Math.log10(100);
-            progress = 0.7 + 0.3 * Math.min(logProgress, 1);
+            // After 2.0x: plane stays at cruise position (progress = 1), just floating
+            progress = 1.0;
         }
         progress = Math.min(progress, 1);
 
         // Start from far left edge
         const startX = 0;
         const startY = height - 20;
-        const cruiseX = width * 0.75;
+        const cruiseX = width * 0.80;
         const cruiseY = height * 0.25;
 
         // Smooth easing
@@ -119,7 +118,7 @@ const AviatorCanvas: React.FC<AviatorCanvasProps> = ({ gameState, currentMultipl
 
         let currentX = startX + (cruiseX - startX) * ease;
         let currentY = startY + (cruiseY - startY) * ease;
-        let rotation = -15 * ease;
+        let rotation = 15 - 15 * ease; // Base 15 degrees right tilt, minus flight angle
 
         if (state === 'crashed') {
             if (crashTimeRef.current === 0) crashTimeRef.current = Date.now();
