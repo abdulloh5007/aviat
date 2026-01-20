@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         const message = `Aviator o'yini uchun bepul signal
 Keyingi aylanma natijasi ${multiplier.toFixed(2)}x
 
-Bu signallar faqat <a href="https://aviatorz.duckdns.org/">aviatorwinn.com</a> o'yini uchun maxsuslangan`;
+Bu signallar faqat <a href="https://aviatorz.bounceme.net/">aviatorwinn.com</a> o'yini uchun maxsuslangan`;
 
         // Send text message with AbortController timeout
         const controller = new AbortController();
