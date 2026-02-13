@@ -142,10 +142,15 @@ async function handlePaymentCallback(update: any) {
         return;
     }
 
+    // Acknowledge quickly to avoid Telegram BOT_RESPONSE_TIMEOUT on slower DB calls.
+    await answerCallbackQuery(callbackId, 'Обрабатываю...');
+
     const configuredPaymentsChatId = await getTelegramChatId('payments');
     const callbackChatId = callback.message?.chat?.id?.toString();
     if (configuredPaymentsChatId && callbackChatId && configuredPaymentsChatId !== callbackChatId) {
-        await answerCallbackQuery(callbackId, 'Noto\'g\'ri chat', true);
+        if (callback.message?.chat?.id) {
+            await sendMessage(callback.message.chat.id, '❌ Noto\'g\'ri chat');
+        }
         return;
     }
 
@@ -154,15 +159,15 @@ async function handlePaymentCallback(update: any) {
     if (callbackData.action === 'approve') {
         const result = await approvePaymentRequest(callbackData.paymentId);
         if (!result.ok) {
-            await answerCallbackQuery(callbackId, result.error, true);
+            if (messageChatId) {
+                await sendMessage(messageChatId, `❌ ${result.error}`);
+            }
             return;
         }
 
         const processedLine = result.state === 'already_completed'
             ? '✅ Статус: Уже принято'
             : '✅ Статус: Принято';
-
-        await answerCallbackQuery(callbackId, 'Принято');
 
         if (messageChatId && messageId) {
             await clearInlineButtons(messageChatId, messageId);
@@ -173,15 +178,15 @@ async function handlePaymentCallback(update: any) {
 
     const result = await rejectPaymentRequest(callbackData.paymentId);
     if (!result.ok) {
-        await answerCallbackQuery(callbackId, result.error, true);
+        if (messageChatId) {
+            await sendMessage(messageChatId, `❌ ${result.error}`);
+        }
         return;
     }
 
     const processedLine = result.state === 'already_cancelled'
         ? '❌ Статус: Уже отклонено'
         : '❌ Статус: Отклонено';
-
-    await answerCallbackQuery(callbackId, 'Отклонено');
 
     if (messageChatId && messageId) {
         await clearInlineButtons(messageChatId, messageId);
