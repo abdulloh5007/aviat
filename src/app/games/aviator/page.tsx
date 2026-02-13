@@ -220,22 +220,6 @@ export default function AviatorGamePage() {
         loadUserProfile();
     }, [user]);
 
-    // Load multiplier history from database
-    useEffect(() => {
-        const loadHistory = async () => {
-            const { data } = await supabase
-                .from('game_rounds')
-                .select('multiplier')
-                .order('created_at', { ascending: false })
-                .limit(30);
-
-            if (data && data.length > 0) {
-                setMultiplierHistory(data.map(r => r.multiplier));
-            }
-        };
-        loadHistory();
-    }, []);
-
     // Payment timer countdown
     useEffect(() => {
         if (timeRemaining <= 0) return;

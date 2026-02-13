@@ -81,13 +81,20 @@ async function gameLoop() {
 
     let lastRoundId = 0;
     let lastCrashedRound = 0;
+    let state = await getState();
+
+    if (!state) {
+        console.log('⚠️ No game state found, creating...');
+        const created = await callApi('next');
+        state = created?.state || null;
+        await sleep(1000);
+    }
 
     while (true) {
-        const state = await getState();
-
         if (!state) {
             console.log('⚠️ No game state found, creating...');
-            await callApi('next');
+            const recreated = await callApi('next');
+            state = recreated?.state || null;
             await sleep(1000);
             continue;
         }
@@ -101,15 +108,26 @@ async function gameLoop() {
                     // Отправить сигнал в начале ожидания
                     sendSignal(state.crash_point);
                 }
-                await sleep(WAITING_DURATION);
-                await callApi('start');
-                console.log(`🚀 Round ${state.round_id}: Started!`);
+
+                // Если цикл перезапущен в середине waiting, ждём только остаток
+                const waitingStartedAt = new Date(state.phase_start_at).getTime();
+                const waitingElapsed = Date.now() - waitingStartedAt;
+                const waitingRemaining = Math.max(0, WAITING_DURATION - waitingElapsed);
+                await sleep(waitingRemaining);
+
+                const started = await callApi('start');
+                state = started?.state || await getState();
+                if (state?.phase === 'flying') {
+                    console.log(`🚀 Round ${state.round_id}: Started!`);
+                }
                 break;
 
             case 'flying':
                 const result = await callApi('tick');
-                if (result?.state?.phase === 'crashed') {
-                    const crashedMultiplier = result.state.multiplier;
+                state = result?.state || state;
+
+                if (state.phase === 'crashed') {
+                    const crashedMultiplier = state.multiplier;
                     console.log(`💥 Round ${state.round_id}: Crashed at ${crashedMultiplier}x`);
 
                     // Сохранить в историю только один раз
@@ -122,9 +140,20 @@ async function gameLoop() {
                 break;
 
             case 'crashed':
-                await sleep(CRASHED_DURATION);
-                await callApi('next');
+                // Если цикл перезапущен в середине crashed, ждём только остаток
+                const crashedStartedAt = new Date(state.phase_start_at).getTime();
+                const crashedElapsed = Date.now() - crashedStartedAt;
+                const crashedRemaining = Math.max(0, CRASHED_DURATION - crashedElapsed);
+                await sleep(crashedRemaining);
+
+                const nextRound = await callApi('next');
+                state = nextRound?.state || await getState();
                 console.log(`\n📍 Starting new round...`);
+                break;
+
+            default:
+                state = await getState();
+                await sleep(300);
                 break;
         }
     }

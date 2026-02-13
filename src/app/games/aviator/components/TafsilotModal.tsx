@@ -1,7 +1,7 @@
 'use client';
 
 import { X, Clock, XCircle, CheckCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
 interface TafsilotModalProps {
@@ -38,26 +38,20 @@ export default function TafsilotModal({
     const [withdraws, setWithdraws] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        if (isOpen && userId) {
-            loadTransactions();
-        }
-    }, [isOpen, userId]);
-
-    const loadTransactions = async () => {
+    const loadTransactions = useCallback(async () => {
         setIsLoading(true);
         try {
             // Load deposits
             const { data: depositData } = await supabase
                 .from('payment_requests')
-                .select('*')
+                .select('id, method, amount, status, created_at')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false });
 
             // Load withdrawals
             const { data: withdrawData } = await supabase
                 .from('withdraw_requests')
-                .select('*')
+                .select('id, method, amount, status, created_at')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false });
 
@@ -68,7 +62,13 @@ export default function TafsilotModal({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [userId]);
+
+    useEffect(() => {
+        if (isOpen && userId) {
+            loadTransactions();
+        }
+    }, [isOpen, userId, loadTransactions]);
 
     if (!isOpen) return null;
 
@@ -159,7 +159,7 @@ export default function TafsilotModal({
                         </div>
                     ) : currentTransactions.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
-                            Hozircha tranzaksiyalar yo'q
+                            Hozircha tranzaksiyalar yo&apos;q
                         </div>
                     ) : (
                         <>

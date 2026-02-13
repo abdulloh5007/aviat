@@ -6,6 +6,16 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+const GAME_STATE_SELECT = `
+    id,
+    round_id,
+    phase,
+    multiplier,
+    crash_point,
+    phase_start_at,
+    updated_at
+`;
+
 // Генерация crash point по формуле Aviator
 function generateCrashPoint(): number {
     const e = 2 ** 32;
@@ -26,7 +36,7 @@ export async function GET() {
     try {
         const { data, error } = await supabase
             .from('game_state')
-            .select('*')
+            .select(GAME_STATE_SELECT)
             .order('updated_at', { ascending: false })
             .limit(1)
             .single();
@@ -36,7 +46,7 @@ export async function GET() {
         }
 
         return NextResponse.json({ state: data });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Internal error' }, { status: 500 });
     }
 }
@@ -54,7 +64,7 @@ export async function POST(request: NextRequest) {
         // Получить текущее состояние
         const { data: current } = await supabase
             .from('game_state')
-            .select('*')
+            .select(GAME_STATE_SELECT)
             .order('updated_at', { ascending: false })
             .limit(1)
             .single();
@@ -91,7 +101,9 @@ export async function POST(request: NextRequest) {
                 break;
 
             case 'tick':
-                // Обновить множитель (вызывается часто)
+                // Обновить множитель (вызывается часто).
+                // Чтобы снизить egress, не пишем в БД каждый тик во время полёта:
+                // UI интерполирует множитель локально по phase_start_at.
                 if (current.phase === 'flying') {
                     const elapsed = (Date.now() - new Date(current.phase_start_at).getTime()) / 1000;
                     const newMultiplier = Math.pow(1.06, elapsed); // ~6% в секунду
@@ -105,11 +117,16 @@ export async function POST(request: NextRequest) {
                             phase_start_at: new Date().toISOString()
                         };
                     } else {
-                        update = {
-                            ...update,
-                            multiplier: Math.round(newMultiplier * 100) / 100
-                        };
+                        return NextResponse.json({
+                            state: {
+                                ...current,
+                                multiplier: Math.round(newMultiplier * 100) / 100,
+                                updated_at: new Date().toISOString()
+                            }
+                        });
                     }
+                } else {
+                    return NextResponse.json({ state: current });
                 }
                 break;
 
@@ -133,7 +150,7 @@ export async function POST(request: NextRequest) {
             .from('game_state')
             .update(update)
             .eq('id', current.id)
-            .select()
+            .select(GAME_STATE_SELECT)
             .single();
 
         if (error) {
@@ -141,7 +158,7 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ state: updated });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Internal error' }, { status: 500 });
     }
 }
