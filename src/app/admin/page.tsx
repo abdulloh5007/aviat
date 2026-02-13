@@ -41,7 +41,20 @@ interface TelegramSettings {
     paymentsChatId: string;
     analysisChatId: string;
     updatedAt: string | null;
+    telegramAdminIds: string[];
+    telegramAdminIdsUpdatedAt: string | null;
 }
+
+const parseTelegramAdminIdsInput = (value: string): string[] => {
+    return Array.from(
+        new Set(
+            value
+                .split(/[\n,;]+/)
+                .map(item => item.trim())
+                .filter(Boolean)
+        )
+    );
+};
 
 const formatAmount = (value: number): string => {
     return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -105,8 +118,11 @@ export default function AdminPage() {
     const [telegramSettings, setTelegramSettings] = useState<TelegramSettings>({
         paymentsChatId: '',
         analysisChatId: '',
-        updatedAt: null
+        updatedAt: null,
+        telegramAdminIds: [],
+        telegramAdminIdsUpdatedAt: null
     });
+    const [telegramAdminIdsInput, setTelegramAdminIdsInput] = useState('');
     const [loadingSettings, setLoadingSettings] = useState(false);
     const [savingSettings, setSavingSettings] = useState(false);
     const [settingsError, setSettingsError] = useState<string>('');
@@ -167,7 +183,15 @@ export default function AdminPage() {
             }
 
             if (data.settings) {
-                setTelegramSettings(data.settings);
+                const settings = {
+                    paymentsChatId: data.settings.paymentsChatId || '',
+                    analysisChatId: data.settings.analysisChatId || '',
+                    updatedAt: data.settings.updatedAt || null,
+                    telegramAdminIds: Array.isArray(data.settings.telegramAdminIds) ? data.settings.telegramAdminIds : [],
+                    telegramAdminIdsUpdatedAt: data.settings.telegramAdminIdsUpdatedAt || null
+                };
+                setTelegramSettings(settings);
+                setTelegramAdminIdsInput(settings.telegramAdminIds.join('\n'));
             }
         } catch (err) {
             console.error('Error fetching telegram settings:', err);
@@ -308,7 +332,8 @@ export default function AdminPage() {
                 body: JSON.stringify({
                     adminUserId: user.id,
                     paymentsChatId: telegramSettings.paymentsChatId,
-                    analysisChatId: telegramSettings.analysisChatId
+                    analysisChatId: telegramSettings.analysisChatId,
+                    telegramAdminIds: telegramSettings.telegramAdminIds
                 })
             });
             const data = await response.json();
@@ -318,7 +343,15 @@ export default function AdminPage() {
             }
 
             if (data.settings) {
-                setTelegramSettings(data.settings);
+                const settings = {
+                    paymentsChatId: data.settings.paymentsChatId || '',
+                    analysisChatId: data.settings.analysisChatId || '',
+                    updatedAt: data.settings.updatedAt || null,
+                    telegramAdminIds: Array.isArray(data.settings.telegramAdminIds) ? data.settings.telegramAdminIds : [],
+                    telegramAdminIdsUpdatedAt: data.settings.telegramAdminIdsUpdatedAt || null
+                };
+                setTelegramSettings(settings);
+                setTelegramAdminIdsInput(settings.telegramAdminIds.join('\n'));
             }
 
             setSettingsSuccess('Sozlamalar saqlandi');
@@ -359,6 +392,9 @@ export default function AdminPage() {
     }
     if (!telegramSettings.analysisChatId.trim()) {
         missingTelegramChatIds.push('Signal chat ID');
+    }
+    if (telegramSettings.telegramAdminIds.length === 0) {
+        missingTelegramChatIds.push('Admin Telegram ID');
     }
 
     return (
@@ -407,6 +443,11 @@ export default function AdminPage() {
                                 Oxirgi yangilanish: {formatDate(telegramSettings.updatedAt)}
                             </p>
                         )}
+                        {telegramSettings.telegramAdminIdsUpdatedAt && (
+                            <p className="text-gray-500 text-xs">
+                                Admin ID yangilanishi: {formatDate(telegramSettings.telegramAdminIdsUpdatedAt)}
+                            </p>
+                        )}
                     </div>
 
                     {!loadingSettings && missingTelegramChatIds.length > 0 && (
@@ -438,6 +479,26 @@ export default function AdminPage() {
                                 placeholder="-1001234567890"
                                 className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/60"
                             />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-gray-300 text-sm mb-2">Admin Telegram ID (har qatorda bittadan)</label>
+                            <textarea
+                                value={telegramAdminIdsInput}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    setTelegramAdminIdsInput(value);
+                                    setTelegramSettings(prev => ({
+                                        ...prev,
+                                        telegramAdminIds: parseTelegramAdminIdsInput(value)
+                                    }));
+                                }}
+                                placeholder={`1207001217\n123456789`}
+                                rows={4}
+                                className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/60"
+                            />
+                            <p className="text-gray-500 text-xs mt-2">
+                                Ushbu ID&apos;lar Telegramdagi qabul/rad etish tugmalarini bosishi va bot admin komandalarini ishlatishi mumkin.
+                            </p>
                         </div>
                     </div>
 

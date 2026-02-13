@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getTelegramChatId } from '@/lib/telegramSettings';
 import { approvePaymentRequest, rejectPaymentRequest } from '@/lib/paymentActions';
+import { isAllowedTelegramAdmin } from '@/lib/telegramAdminIds';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID;
 const PAYMENT_CALLBACK_PREFIX = 'payment:';
 
 const supabase = createClient(
@@ -84,25 +84,6 @@ function formatAmount(amount: number): string {
     return Number(amount || 0).toLocaleString('uz-UZ');
 }
 
-async function isTelegramAdminForPayments(telegramUserId: string | undefined): Promise<boolean> {
-    if (!telegramUserId) {
-        return false;
-    }
-
-    const { data, error } = await supabase
-        .from('admins')
-        .select('id')
-        .eq('added_by', telegramUserId)
-        .limit(1);
-
-    if (error) {
-        console.error('Error checking Telegram admin in DB:', error);
-        return false;
-    }
-
-    return (data?.length || 0) > 0;
-}
-
 async function handlePaymentCallback(update: any) {
     const callback = update.callback_query;
     if (!callback) return;
@@ -115,8 +96,8 @@ async function handlePaymentCallback(update: any) {
     }
 
     const callbackUserId = callback.from?.id?.toString();
-    const isDbAdmin = await isTelegramAdminForPayments(callbackUserId);
-    if (!isDbAdmin) {
+    const isAllowedAdmin = await isAllowedTelegramAdmin(callbackUserId);
+    if (!isAllowedAdmin) {
         await answerCallbackQuery(callbackId, 'Ruxsat yo\'q', true);
         return;
     }
@@ -193,7 +174,8 @@ export async function POST(request: NextRequest) {
         const text = message.text.trim();
 
         // Verify Admin
-        if (userId !== ADMIN_ID) {
+        const isAllowedAdmin = await isAllowedTelegramAdmin(userId);
+        if (!isAllowedAdmin) {
             console.log(`Unauthorized command attempt from ${userId}`);
             // Optionally ignore or reply unauthorized
             return NextResponse.json({ ok: true });

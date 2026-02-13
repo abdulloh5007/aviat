@@ -52,6 +52,7 @@ export default function AviatorGamePage() {
     const [timeRemaining, setTimeRemaining] = useState<number>(0);
     const [copied, setCopied] = useState(false);
     const [isCreatingRequest, setIsCreatingRequest] = useState(false);
+    const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
     const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
     // Withdraw Modal State
@@ -448,6 +449,7 @@ export default function AviatorGamePage() {
         setSelectedPayment(null);
         setAmount('');
         setCurrentPaymentRequest(null);
+        setIsSubmittingPayment(false);
         setUploadedFile(null);
     }, []);
 
@@ -518,21 +520,25 @@ export default function AviatorGamePage() {
 
         setIsCreatingRequest(true);
         try {
-            // Check for existing pending payment request for this method
+            // One active deposit request per user: pending or awaiting confirmation.
             const { data: existingRequests, error: checkError } = await supabase
                 .from('payment_requests')
                 .select('*')
                 .eq('user_id', user?.id)
-                .eq('method', selectedPayment.id)
-                .eq('status', 'pending')
+                .in('status', ['pending', 'awaiting_confirmation'])
                 .gt('expires_at', new Date().toISOString())
+                .order('created_at', { ascending: false })
                 .limit(1);
 
             if (!checkError && existingRequests && existingRequests.length > 0) {
                 // Resume existing payment request
                 const existingRequest = existingRequests[0];
+                const existingMethod = paymentMethods.find((method) => method.id === existingRequest.method);
                 const expiresAt = new Date(existingRequest.expires_at).getTime();
                 const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+                if (existingMethod) {
+                    setSelectedPayment(existingMethod);
+                }
                 setCurrentPaymentRequest(existingRequest);
                 setTimeRemaining(remaining);
                 setDepositStep('confirm');
@@ -578,8 +584,12 @@ export default function AviatorGamePage() {
 
     // Confirm payment and send to Telegram
     const confirmPayment = async () => {
-        if (!currentPaymentRequest || !selectedPayment) return;
+        if (!currentPaymentRequest || !selectedPayment || isSubmittingPayment) return;
+        if (currentPaymentRequest.status === 'awaiting_confirmation') {
+            return;
+        }
 
+        setIsSubmittingPayment(true);
         try {
             const formData = new FormData();
             formData.append('userId', userId);
@@ -600,6 +610,10 @@ export default function AviatorGamePage() {
                 throw new Error(result?.error || 'Telegramga yuborishda xatolik');
             }
 
+            const nextExpiresAt = typeof result?.expiresAt === 'string' ? result.expiresAt : currentPaymentRequest.expires_at;
+            const nextRemaining = Math.max(0, Math.floor((new Date(nextExpiresAt).getTime() - Date.now()) / 1000));
+            setCurrentPaymentRequest(prev => prev ? { ...prev, status: 'awaiting_confirmation', expires_at: nextExpiresAt } : prev);
+            setTimeRemaining(nextRemaining);
             setShowSuccessModal(true);
             closeDepositModal();
         } catch (err) {
@@ -608,6 +622,8 @@ export default function AviatorGamePage() {
             setErrorMessage(message);
             setShowErrorModal(true);
             closeDepositModal();
+        } finally {
+            setIsSubmittingPayment(false);
         }
     };
 
@@ -628,6 +644,8 @@ export default function AviatorGamePage() {
             </div>
         );
     }
+
+    const isAwaitingReview = currentPaymentRequest?.status === 'awaiting_confirmation';
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-[#181818] to-[#010101] flex flex-col">
@@ -962,7 +980,9 @@ export default function AviatorGamePage() {
                                 <div className="p-5">
                                     {/* Success Message */}
                                     <p className="text-gray-600 text-sm mb-4">
-                                        So&apos;rov muvaffaqiyatli qabul qilind. Belgilangan miqdorni ko&apos;rsatilgan kartaga o&apos;tkazing
+                                        {isAwaitingReview
+                                            ? "Sizning so'rovingiz allaqachon yuborilgan va tekshirilmoqda. Iltimos kuting."
+                                            : "So'rov muvaffaqiyatli qabul qilindi. Belgilangan miqdorni ko'rsatilgan kartaga o'tkazing."}
                                     </p>
 
                                     {/* Guarantee Badge */}
@@ -1010,45 +1030,49 @@ export default function AviatorGamePage() {
                                     </div>
 
                                     {/* File Upload Field */}
-                                    <div className="border border-gray-200 rounded-lg p-4 mb-3">
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex items-center gap-2">
-                                                <Shield size={18} className="text-gray-400" />
-                                                <span className="text-gray-600 text-sm">To&apos;lov chekini yuklang</span>
-                                            </div>
-                                            <label className="cursor-pointer">
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={(e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (file) {
-                                                            // Check 20MB limit
-                                                            if (file.size > 20 * 1024 * 1024) {
-                                                                setErrorMessage("Fayl hajmi 20 MB dan oshmasligi kerak!");
-                                                                setShowErrorModal(true);
-                                                                return;
-                                                            }
-                                                            setUploadedFile(file);
-                                                        }
-                                                    }}
-                                                />
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${uploadedFile ? 'bg-green-500' : 'bg-[#27b82c]'}`}>
-                                                    {uploadedFile ? <Check size={16} className="text-white" /> : <Copy size={16} className="text-white rotate-180" />}
+                                    {!isAwaitingReview && (
+                                        <div className="border border-gray-200 rounded-lg p-4 mb-3">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <Shield size={18} className="text-gray-400" />
+                                                    <span className="text-gray-600 text-sm">To&apos;lov chekini yuklang</span>
                                                 </div>
-                                            </label>
+                                                <label className="cursor-pointer">
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) {
+                                                                // Check 20MB limit
+                                                                if (file.size > 20 * 1024 * 1024) {
+                                                                    setErrorMessage("Fayl hajmi 20 MB dan oshmasligi kerak!");
+                                                                    setShowErrorModal(true);
+                                                                    return;
+                                                                }
+                                                                setUploadedFile(file);
+                                                            }
+                                                        }}
+                                                    />
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${uploadedFile ? 'bg-green-500' : 'bg-[#27b82c]'}`}>
+                                                        {uploadedFile ? <Check size={16} className="text-white" /> : <Copy size={16} className="text-white rotate-180" />}
+                                                    </div>
+                                                </label>
+                                            </div>
+                                            {uploadedFile && (
+                                                <p className="text-green-500 text-xs mt-2">{uploadedFile.name}</p>
+                                            )}
                                         </div>
-                                        {uploadedFile && (
-                                            <p className="text-green-500 text-xs mt-2">{uploadedFile.name}</p>
-                                        )}
-                                    </div>
+                                    )}
 
                                     {/* Timer Field */}
                                     <div className="border border-gray-200 rounded-lg p-4 mb-4">
                                         <div className="flex justify-between items-center">
                                             <div>
-                                                <p className="text-gray-400 text-xs mb-1">Sizning transferingizni kutamiz</p>
+                                                <p className="text-gray-400 text-xs mb-1">
+                                                    {isAwaitingReview ? 'So&apos;rovingiz tekshirilmoqda' : 'Sizning transferingizni kutamiz'}
+                                                </p>
                                                 <p className="text-[#1a1a4e] text-lg font-bold">{formatTimeRemaining(timeRemaining)}</p>
                                             </div>
                                             <div className="w-8 h-8 rounded-full border-2 border-gray-300 border-t-[#27b82c] animate-spin" />
@@ -1056,19 +1080,29 @@ export default function AviatorGamePage() {
                                     </div>
 
                                     {/* Confirm Button */}
-                                    <button
-                                        onClick={() => {
-                                            if (!uploadedFile) {
-                                                setErrorMessage("To'lov chekini yuklang!");
-                                                setShowErrorModal(true);
-                                                return;
-                                            }
-                                            confirmPayment();
-                                        }}
-                                        className="w-full py-4 bg-[#27b82c] hover:bg-[#2ed134] text-white rounded-full font-semibold text-lg transition-colors uppercase"
-                                    >
-                                        To&apos;landi
-                                    </button>
+                                    {isAwaitingReview ? (
+                                        <button
+                                            disabled
+                                            className="w-full py-4 bg-gray-400 text-white rounded-full font-semibold text-lg uppercase cursor-not-allowed"
+                                        >
+                                            So&apos;rov tekshirilmoqda...
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => {
+                                                if (!uploadedFile) {
+                                                    setErrorMessage("To'lov chekini yuklang!");
+                                                    setShowErrorModal(true);
+                                                    return;
+                                                }
+                                                confirmPayment();
+                                            }}
+                                            disabled={isSubmittingPayment}
+                                            className="w-full py-4 bg-[#27b82c] hover:bg-[#2ed134] text-white rounded-full font-semibold text-lg transition-colors uppercase disabled:opacity-70 flex items-center justify-center gap-2"
+                                        >
+                                            {isSubmittingPayment ? <><Loader2 size={20} className="animate-spin" /> Yuborilmoqda...</> : "To'landi"}
+                                        </button>
+                                    )}
                                 </div>
                             </>
                         )}

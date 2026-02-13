@@ -9,6 +9,16 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+type PaymentRequestRow = {
+    id: string;
+    user_id: string;
+    method: string;
+    amount: number;
+    card_number: string;
+    status: 'pending' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled' | string;
+    expires_at: string;
+};
+
 export async function POST(request: NextRequest) {
     try {
         const contentType = request.headers.get('content-type') || '';
@@ -41,21 +51,122 @@ export async function POST(request: NextRequest) {
             paymentRequestId = json.paymentRequestId || '';
         }
 
-        const paymentsChatId = await getTelegramChatId('payments');
+        const isDepositRequest = type !== 'withdraw';
+        let paymentRequest: PaymentRequestRow | null = null;
+        let alreadySubmitted = false;
 
-        if (!BOT_TOKEN || !paymentsChatId) {
-            console.error('Telegram credentials not configured');
-            return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
+        if (isDepositRequest) {
+            if (!paymentRequestId) {
+                return NextResponse.json({ error: 'Payment request ID required' }, { status: 400 });
+            }
+
+            const { data: currentRequest, error: requestError } = await supabase
+                .from('payment_requests')
+                .select('id, user_id, method, amount, card_number, status, expires_at')
+                .eq('id', paymentRequestId)
+                .single();
+
+            if (requestError || !currentRequest) {
+                return NextResponse.json({ error: 'Payment request not found' }, { status: 404 });
+            }
+
+            paymentRequest = currentRequest as PaymentRequestRow;
+            const nowIso = new Date().toISOString();
+            const expiresAtMs = new Date(paymentRequest.expires_at).getTime();
+            const isExpired = !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now();
+
+            if (isExpired) {
+                if (paymentRequest.status !== 'expired') {
+                    await supabase
+                        .from('payment_requests')
+                        .update({ status: 'expired' })
+                        .eq('id', paymentRequest.id);
+                }
+                return NextResponse.json({
+                    error: "To'lov so'rovi muddati tugagan",
+                    status: 'expired',
+                    expiresAt: paymentRequest.expires_at
+                }, { status: 409 });
+            }
+
+            if (paymentRequest.status === 'awaiting_confirmation') {
+                alreadySubmitted = true;
+            } else if (paymentRequest.status === 'pending') {
+                const { data: lockedRows, error: lockError } = await supabase
+                    .from('payment_requests')
+                    .update({ status: 'awaiting_confirmation' })
+                    .eq('id', paymentRequest.id)
+                    .eq('status', 'pending')
+                    .gt('expires_at', nowIso)
+                    .select('id, user_id, method, amount, card_number, status, expires_at')
+                    .limit(1);
+
+                if (lockError) {
+                    console.error('Failed to lock payment request for Telegram send:', lockError);
+                    return NextResponse.json({ error: 'Failed to process payment request' }, { status: 500 });
+                }
+
+                if (lockedRows && lockedRows.length > 0) {
+                    paymentRequest = lockedRows[0] as PaymentRequestRow;
+                } else {
+                    const { data: latestRequest } = await supabase
+                        .from('payment_requests')
+                        .select('id, user_id, method, amount, card_number, status, expires_at')
+                        .eq('id', paymentRequest.id)
+                        .single();
+
+                    if (!latestRequest) {
+                        return NextResponse.json({ error: 'Payment request not found' }, { status: 404 });
+                    }
+
+                    paymentRequest = latestRequest as PaymentRequestRow;
+                    const latestExpiresAtMs = new Date(paymentRequest.expires_at).getTime();
+                    const latestExpired = !Number.isFinite(latestExpiresAtMs) || latestExpiresAtMs <= Date.now();
+
+                    if (latestExpired || paymentRequest.status === 'expired') {
+                        return NextResponse.json({
+                            error: "To'lov so'rovi muddati tugagan",
+                            status: 'expired',
+                            expiresAt: paymentRequest.expires_at
+                        }, { status: 409 });
+                    }
+
+                    if (paymentRequest.status === 'awaiting_confirmation') {
+                        alreadySubmitted = true;
+                    } else {
+                        return NextResponse.json({
+                            error: `Payment request is already ${paymentRequest.status}`
+                        }, { status: 409 });
+                    }
+                }
+            } else {
+                return NextResponse.json({
+                    error: `Payment request is already ${paymentRequest.status}`
+                }, { status: 409 });
+            }
+
+            method = paymentRequest.method;
+            amount = paymentRequest.amount.toString();
+        }
+
+        if (alreadySubmitted) {
+            return NextResponse.json({
+                success: true,
+                alreadySubmitted: true,
+                status: paymentRequest?.status || 'awaiting_confirmation',
+                expiresAt: paymentRequest?.expires_at || null
+            });
         }
 
         // Get short user_id from profiles
         let shortUserId = userId;
-        if (userId) {
+        const profileAuthId = paymentRequest?.user_id || userId;
+        if (profileAuthId) {
             try {
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('user_id')
-                    .eq('id', userId)
+                    .eq('id', profileAuthId)
                     .single();
                 if (profile?.user_id) {
                     shortUserId = profile.user_id;
@@ -70,6 +181,19 @@ export async function POST(request: NextRequest) {
         const amountDisplay = amount ? Number(amount).toLocaleString('uz-UZ') : '0';
         const dateDisplay = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
         const hasActionButtons = type !== 'withdraw' && !!paymentRequestId;
+        const paymentsChatId = await getTelegramChatId('payments');
+
+        if (!BOT_TOKEN || !paymentsChatId) {
+            if (isDepositRequest && paymentRequest?.id) {
+                await supabase
+                    .from('payment_requests')
+                    .update({ status: 'pending' })
+                    .eq('id', paymentRequest.id)
+                    .eq('status', 'awaiting_confirmation');
+            }
+            console.error('Telegram credentials not configured');
+            return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
+        }
 
         const paymentActionsMarkup = hasActionButtons
             ? {
@@ -204,10 +328,21 @@ export async function POST(request: NextRequest) {
 
         const telegramResult = await sendTelegramNotification();
         if (!telegramResult.ok) {
+            if (isDepositRequest && paymentRequest?.id) {
+                await supabase
+                    .from('payment_requests')
+                    .update({ status: 'pending' })
+                    .eq('id', paymentRequest.id)
+                    .eq('status', 'awaiting_confirmation');
+            }
             return NextResponse.json({ error: telegramResult.error || 'Failed to send Telegram notification' }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({
+            success: true,
+            status: paymentRequest?.status || (isDepositRequest ? 'awaiting_confirmation' : 'sent'),
+            expiresAt: paymentRequest?.expires_at || null
+        });
     } catch (error) {
         console.error('Error in payment notification:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
