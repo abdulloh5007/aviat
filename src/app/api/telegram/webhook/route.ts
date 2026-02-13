@@ -105,23 +105,51 @@ async function markPaymentMessageProcessed(message: any, statusLine: string) {
 }
 
 function parsePaymentCallbackData(data: string | undefined): { action: 'approve' | 'reject'; paymentId: string } | null {
-    if (!data || !data.startsWith(PAYMENT_CALLBACK_PREFIX)) {
+    if (!data) {
         return null;
     }
 
-    const parts = data.split(':');
-    if (parts.length < 3) {
-        return null;
+    // Current format: payment:approve:<paymentId>
+    if (data.startsWith(PAYMENT_CALLBACK_PREFIX)) {
+        const parts = data.split(':');
+        if (parts.length >= 3) {
+            const action = parts[1];
+            const paymentId = parts.slice(2).join(':');
+            if (paymentId && (action === 'approve' || action === 'reject')) {
+                return { action, paymentId };
+            }
+        }
     }
 
-    const action = parts[1];
-    const paymentId = parts.slice(2).join(':');
-
-    if (!paymentId || (action !== 'approve' && action !== 'reject')) {
-        return null;
+    // Legacy compatibility:
+    // approve:<paymentId> / reject:<paymentId>
+    if (data.startsWith('approve:') || data.startsWith('reject:')) {
+        const [action, ...rest] = data.split(':');
+        const paymentId = rest.join(':');
+        if (paymentId && (action === 'approve' || action === 'reject')) {
+            return { action, paymentId };
+        }
     }
 
-    return { action, paymentId };
+    // Legacy compatibility:
+    // payment_approve_<paymentId> / payment_reject_<paymentId>
+    if (data.startsWith('payment_approve_')) {
+        return { action: 'approve', paymentId: data.replace('payment_approve_', '') };
+    }
+    if (data.startsWith('payment_reject_')) {
+        return { action: 'reject', paymentId: data.replace('payment_reject_', '') };
+    }
+
+    // Legacy compatibility:
+    // approve_<paymentId> / reject_<paymentId>
+    if (data.startsWith('approve_')) {
+        return { action: 'approve', paymentId: data.replace('approve_', '') };
+    }
+    if (data.startsWith('reject_')) {
+        return { action: 'reject', paymentId: data.replace('reject_', '') };
+    }
+
+    return null;
 }
 
 async function handlePaymentCallback(update: any) {
