@@ -84,6 +84,25 @@ function formatAmount(amount: number): string {
     return Number(amount || 0).toLocaleString('uz-UZ');
 }
 
+async function isTelegramAdminForPayments(telegramUserId: string | undefined): Promise<boolean> {
+    if (!telegramUserId) {
+        return false;
+    }
+
+    const { data, error } = await supabase
+        .from('admins')
+        .select('id')
+        .eq('added_by', telegramUserId)
+        .limit(1);
+
+    if (error) {
+        console.error('Error checking Telegram admin in DB:', error);
+        return false;
+    }
+
+    return (data?.length || 0) > 0;
+}
+
 async function handlePaymentCallback(update: any) {
     const callback = update.callback_query;
     if (!callback) return;
@@ -96,7 +115,8 @@ async function handlePaymentCallback(update: any) {
     }
 
     const callbackUserId = callback.from?.id?.toString();
-    if (!ADMIN_ID || callbackUserId !== ADMIN_ID) {
+    const isDbAdmin = await isTelegramAdminForPayments(callbackUserId);
+    if (!isDbAdmin) {
         await answerCallbackQuery(callbackId, 'Ruxsat yo\'q', true);
         return;
     }
