@@ -270,7 +270,18 @@ async function handlePaymentCallback(update: any) {
 
 export async function POST(request: NextRequest) {
     try {
-        const update = await request.json();
+        const rawBody = await request.text();
+        if (!rawBody || !rawBody.trim()) {
+            return NextResponse.json({ ok: true });
+        }
+
+        let update: any = null;
+        try {
+            update = JSON.parse(rawBody);
+        } catch {
+            console.warn('Webhook received non-JSON payload');
+            return NextResponse.json({ ok: true });
+        }
 
         if (update.callback_query) {
             await handlePaymentCallback(update);
@@ -326,4 +337,8 @@ export async function POST(request: NextRequest) {
         console.error('Webhook Error:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
+}
+
+export async function GET() {
+    return NextResponse.json({ ok: true });
 }
