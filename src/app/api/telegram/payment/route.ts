@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getTelegramChatId } from '@/lib/telegramSettings';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const GROUP_ID = process.env.GROUP_ID;
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
         let userId: string = '';
         let method: string = '';
         let amount: string = '';
-        let paymentRequestId: string = '';
         let file: File | null = null;
         let type: string = '';
         let cardNumber: string = '';
@@ -28,7 +27,6 @@ export async function POST(request: NextRequest) {
             userId = formData.get('userId') as string || '';
             method = formData.get('method') as string || '';
             amount = formData.get('amount') as string || '';
-            paymentRequestId = formData.get('paymentRequestId') as string || '';
             file = formData.get('file') as File | null;
         } else {
             const json = await request.json();
@@ -40,7 +38,9 @@ export async function POST(request: NextRequest) {
             cardExpiry = json.cardExpiry || '';
         }
 
-        if (!BOT_TOKEN || !GROUP_ID) {
+        const paymentsChatId = await getTelegramChatId('payments');
+
+        if (!BOT_TOKEN || !paymentsChatId) {
             console.error('Telegram credentials not configured');
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
                     const blob = new Blob([fileBuffer], { type: file.type });
 
                     const telegramFormData = new FormData();
-                    telegramFormData.append('chat_id', GROUP_ID!);
+                    telegramFormData.append('chat_id', paymentsChatId);
                     telegramFormData.append('caption', message);
                     telegramFormData.append('parse_mode', 'Markdown');
 
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            chat_id: GROUP_ID,
+                            chat_id: paymentsChatId,
                             text: message,
                             parse_mode: 'Markdown'
                         }),

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTelegramChatId } from '@/lib/telegramSettings';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const GROUP_ID = process.env.GROUP_ID;
 
 export async function POST(request: NextRequest) {
     try {
         const data = await request.json();
         const { userId, phone, email, country, currency } = data;
+        const paymentsChatId = await getTelegramChatId('payments');
 
-        if (!BOT_TOKEN || !GROUP_ID) {
+        if (!BOT_TOKEN || !paymentsChatId) {
             console.error('Telegram credentials not configured');
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                chat_id: GROUP_ID,
+                chat_id: paymentsChatId,
                 text: message,
                 parse_mode: 'Markdown',
             }),

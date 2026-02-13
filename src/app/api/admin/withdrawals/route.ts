@@ -7,6 +7,16 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+const PROFILE_CHUNK_SIZE = 100;
+
+const chunkArray = <T>(items: T[], size: number): T[][] => {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+        chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+};
+
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -38,20 +48,36 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Failed to fetch withdrawals' }, { status: 500 });
         }
 
-        // Get profiles for user_id lookup (profiles.user_id is the short 6-digit ID)
-        const userIds = [...new Set(withdrawals?.map(w => w.user_id) || [])];
+        // Get profiles for user_id lookup (profiles.id = withdraw_requests.user_id).
+        // Fetch in chunks to avoid very long query strings when there are many requests.
+        const userIds = [...new Set((withdrawals?.map(w => w.user_id) || []).filter(Boolean))];
+        const profilesMap = new Map<string, { user_id: string; phone: string }>();
 
-        const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, user_id, phone')
-            .in('id', userIds);
+        for (const idsChunk of chunkArray(userIds, PROFILE_CHUNK_SIZE)) {
+            const { data: profilesChunk, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, user_id, phone')
+                .in('id', idsChunk);
+
+            if (profilesError) {
+                console.error('Error fetching profile chunk for withdrawals:', profilesError);
+                continue;
+            }
+
+            for (const profile of profilesChunk || []) {
+                profilesMap.set(profile.id, {
+                    user_id: profile.user_id || '',
+                    phone: profile.phone || ''
+                });
+            }
+        }
 
         // Map: profiles.user_id (VARCHAR 6-digit) for display
         const withdrawalsWithUsers = withdrawals?.map(withdrawal => {
-            const profile = profiles?.find(p => p.id === withdrawal.user_id);
+            const profile = profilesMap.get(withdrawal.user_id);
             return {
                 ...withdrawal,
-                profile_user_id: profile?.user_id || 'Unknown'
+                profile_user_id: profile?.user_id || withdrawal.user_id || 'Unknown'
             };
         });
 

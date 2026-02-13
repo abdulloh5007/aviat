@@ -37,6 +37,12 @@ interface WithdrawRequest {
     created_at: string;
 }
 
+interface TelegramSettings {
+    paymentsChatId: string;
+    analysisChatId: string;
+    updatedAt: string | null;
+}
+
 const formatAmount = (value: number): string => {
     return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 };
@@ -96,6 +102,15 @@ export default function AdminPage() {
     const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'cancelled'>('all');
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [mainTab, setMainTab] = useState<'deposits' | 'withdrawals'>('deposits');
+    const [telegramSettings, setTelegramSettings] = useState<TelegramSettings>({
+        paymentsChatId: '',
+        analysisChatId: '',
+        updatedAt: null
+    });
+    const [loadingSettings, setLoadingSettings] = useState(false);
+    const [savingSettings, setSavingSettings] = useState(false);
+    const [settingsError, setSettingsError] = useState<string>('');
+    const [settingsSuccess, setSettingsSuccess] = useState<string>('');
 
     const fetchPayments = useCallback(async () => {
         if (!user?.id) return;
@@ -134,9 +149,37 @@ export default function AdminPage() {
         }
     }, [user?.id]);
 
+    const fetchTelegramSettings = useCallback(async () => {
+        if (!user?.id) return;
+
+        setLoadingSettings(true);
+        setSettingsError('');
+        try {
+            const response = await fetch('/api/admin/telegram-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminUserId: user.id })
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to load settings');
+            }
+
+            if (data.settings) {
+                setTelegramSettings(data.settings);
+            }
+        } catch (err) {
+            console.error('Error fetching telegram settings:', err);
+            setSettingsError('Sozlamalarni yuklashda xatolik yuz berdi');
+        } finally {
+            setLoadingSettings(false);
+        }
+    }, [user?.id]);
+
     const fetchAll = useCallback(async () => {
-        await Promise.all([fetchPayments(), fetchWithdrawals()]);
-    }, [fetchPayments, fetchWithdrawals]);
+        await Promise.all([fetchPayments(), fetchWithdrawals(), fetchTelegramSettings()]);
+    }, [fetchPayments, fetchWithdrawals, fetchTelegramSettings]);
 
     useEffect(() => {
         const checkAdmin = async () => {
@@ -161,7 +204,7 @@ export default function AdminPage() {
                 } else {
                     setIsAdmin(false);
                 }
-            } catch (err) {
+            } catch {
                 setIsAdmin(false);
             } finally {
                 setChecking(false);
@@ -251,6 +294,42 @@ export default function AdminPage() {
         }
     };
 
+    const handleSaveTelegramSettings = async () => {
+        if (!user?.id) return;
+
+        setSavingSettings(true);
+        setSettingsError('');
+        setSettingsSuccess('');
+
+        try {
+            const response = await fetch('/api/admin/telegram-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    adminUserId: user.id,
+                    paymentsChatId: telegramSettings.paymentsChatId,
+                    analysisChatId: telegramSettings.analysisChatId
+                })
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to save settings');
+            }
+
+            if (data.settings) {
+                setTelegramSettings(data.settings);
+            }
+
+            setSettingsSuccess('Sozlamalar saqlandi');
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : 'Saqlashda xatolik yuz berdi';
+            setSettingsError(errorMessage);
+        } finally {
+            setSavingSettings(false);
+        }
+    };
+
     if (loading || checking) {
         return (
             <div className="min-h-screen bg-gradient-to-b from-[#0f0f0f] to-[#1a1a2e] flex items-center justify-center">
@@ -273,6 +352,14 @@ export default function AdminPage() {
         if (filter === 'pending') return p.status === 'pending' || p.status === 'awaiting_confirmation';
         return p.status === filter;
     });
+
+    const missingTelegramChatIds: string[] = [];
+    if (!telegramSettings.paymentsChatId.trim()) {
+        missingTelegramChatIds.push('Pul kiritish chat ID');
+    }
+    if (!telegramSettings.analysisChatId.trim()) {
+        missingTelegramChatIds.push('Signal chat ID');
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-[#0f0f0f] to-[#1a1a2e]">
@@ -307,6 +394,69 @@ export default function AdminPage() {
                             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
                         )}
                     </button>
+                </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-4 pb-6">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:p-5">
+                    <div className="flex flex-col gap-1 mb-4">
+                        <h2 className="text-white text-lg font-semibold">Telegram Chat ID sozlamalari</h2>
+                        <p className="text-gray-400 text-sm">Bu qiymatlar `.env` o&apos;rniga ishlatiladi</p>
+                        {telegramSettings.updatedAt && (
+                            <p className="text-gray-500 text-xs">
+                                Oxirgi yangilanish: {formatDate(telegramSettings.updatedAt)}
+                            </p>
+                        )}
+                    </div>
+
+                    {!loadingSettings && missingTelegramChatIds.length > 0 && (
+                        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                            <p className="text-amber-300 text-sm font-semibold">Telegram yuborish to&apos;liq sozlanmagan</p>
+                            <p className="text-amber-200/90 text-sm mt-1">
+                                To&apos;ldirilmagan maydonlar: {missingTelegramChatIds.join(', ')}. Ushbu maydonlar saqlanmaguncha tegishli Telegram xabarlari yuborilmaydi.
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-gray-300 text-sm mb-2">Pul kiritish chat ID</label>
+                            <input
+                                type="text"
+                                value={telegramSettings.paymentsChatId}
+                                onChange={(e) => setTelegramSettings(prev => ({ ...prev, paymentsChatId: e.target.value }))}
+                                placeholder="-1001234567890"
+                                className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/60"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-300 text-sm mb-2">Signal chat ID</label>
+                            <input
+                                type="text"
+                                value={telegramSettings.analysisChatId}
+                                onChange={(e) => setTelegramSettings(prev => ({ ...prev, analysisChatId: e.target.value }))}
+                                placeholder="-1001234567890"
+                                className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/60"
+                            />
+                        </div>
+                    </div>
+
+                    {(settingsError || settingsSuccess) && (
+                        <p className={`text-sm mt-3 ${settingsError ? 'text-red-400' : 'text-green-400'}`}>
+                            {settingsError || settingsSuccess}
+                        </p>
+                    )}
+
+                    <div className="pt-4">
+                        <button
+                            onClick={handleSaveTelegramSettings}
+                            disabled={savingSettings || loadingSettings}
+                            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium transition-colors"
+                        >
+                            {(savingSettings || loadingSettings) && <Loader2 className="w-4 h-4 animate-spin" />}
+                            Saqlash
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -347,7 +497,7 @@ export default function AdminPage() {
                                 <div className="w-16 h-16 mx-auto mb-4 bg-white/5 rounded-full flex items-center justify-center">
                                     <CreditCard className="w-8 h-8 text-gray-600" />
                                 </div>
-                                <p className="text-gray-500">So'rovlar topilmadi</p>
+                                <p className="text-gray-500">So&apos;rovlar topilmadi</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

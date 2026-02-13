@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getTelegramChatId } from '@/lib/telegramSettings';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const GROUP_ANALYSIS_ID = process.env.GROUP_ANALYSIS_ID;
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const { multiplier } = body;
+        const analysisChatId = await getTelegramChatId('analysis');
 
-        if (!BOT_TOKEN || !GROUP_ANALYSIS_ID) {
+        if (!BOT_TOKEN || !analysisChatId) {
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
 
@@ -26,21 +27,21 @@ Bu signallar faqat <a href="https://aviatorz.bounceme.net/">aviatorwinn.com</a> 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    chat_id: GROUP_ANALYSIS_ID,
+                    chat_id: analysisChatId,
                     text: message,
                     parse_mode: 'HTML',
                     disable_web_page_preview: true
                 }),
                 signal: controller.signal
             });
-        } catch (fetchError) {
+        } catch {
             // Timeout or network error - ignore silently to prevent lag
         } finally {
             clearTimeout(timeoutId);
         }
 
         return NextResponse.json({ success: true });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Error' }, { status: 500 });
     }
 }

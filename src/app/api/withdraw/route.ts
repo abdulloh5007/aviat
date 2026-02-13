@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getTelegramChatId } from '@/lib/telegramSettings';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,7 +8,6 @@ const supabase = createClient(
 );
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const GROUP_ID = process.env.GROUP_ID;
 
 export async function POST(request: NextRequest) {
     try {
@@ -70,7 +70,8 @@ export async function POST(request: NextRequest) {
         }
 
         // Send notification to Telegram (non-blocking)
-        if (BOT_TOKEN && GROUP_ID) {
+        const paymentsChatId = await getTelegramChatId('payments');
+        if (BOT_TOKEN && paymentsChatId) {
             const shortUserId = profile.user_id || 'Unknown';
             const message = `💸 *Pul chiqarish so'rovi!*
 
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    chat_id: GROUP_ID,
+                    chat_id: paymentsChatId,
                     text: message,
                     parse_mode: 'Markdown'
                 })
