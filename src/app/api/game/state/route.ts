@@ -6,6 +6,8 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+const WAITING_DURATION_MS = 5000;
+
 const GAME_STATE_SELECT = `
     id,
     round_id,
@@ -91,6 +93,17 @@ export async function POST(request: NextRequest) {
         switch (action) {
             case 'start':
                 // Начать полёт
+                if (current.phase !== 'waiting') {
+                    return NextResponse.json({ state: current });
+                }
+
+                // Protect waiting phase duration: never allow early start.
+                // This prevents shortened countdown if multiple loop workers run.
+                const waitingElapsed = Date.now() - new Date(current.phase_start_at).getTime();
+                if (waitingElapsed < WAITING_DURATION_MS) {
+                    return NextResponse.json({ state: current });
+                }
+
                 update = {
                     ...update,
                     phase: 'flying',
