@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
         let type: string = '';
         let cardNumber: string = '';
         let cardExpiry: string = '';
+        let paymentRequestId: string = '';
 
         // Handle both FormData and JSON
         if (contentType.includes('multipart/form-data')) {
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
             method = formData.get('method') as string || '';
             amount = formData.get('amount') as string || '';
             file = formData.get('file') as File | null;
+            paymentRequestId = formData.get('paymentRequestId') as string || '';
         } else {
             const json = await request.json();
             userId = json.userId || '';
@@ -36,6 +38,7 @@ export async function POST(request: NextRequest) {
             type = json.type || '';
             cardNumber = json.cardNumber || '';
             cardExpiry = json.cardExpiry || '';
+            paymentRequestId = json.paymentRequestId || '';
         }
 
         const paymentsChatId = await getTelegramChatId('payments');
@@ -66,6 +69,24 @@ export async function POST(request: NextRequest) {
         const methodDisplay = method?.toUpperCase() || 'Nomalum';
         const amountDisplay = amount ? Number(amount).toLocaleString('uz-UZ') : '0';
         const dateDisplay = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+        const hasActionButtons = type !== 'withdraw' && !!paymentRequestId;
+
+        const paymentActionsMarkup = hasActionButtons
+            ? {
+                inline_keyboard: [[
+                    {
+                        text: '✅ Qabul qilish',
+                        callback_data: `payment:approve:${paymentRequestId}`,
+                        style: 'success'
+                    },
+                    {
+                        text: '❌ Rad etish',
+                        callback_data: `payment:reject:${paymentRequestId}`,
+                        style: 'danger'
+                    }
+                ]]
+            }
+            : undefined;
 
         let message: string;
         if (type === 'withdraw') {
@@ -83,13 +104,14 @@ export async function POST(request: NextRequest) {
 👤 *User ID:* \`${shortUserId}\`
 💳 *To'lov usuli:* ${methodDisplay}
 💵 *Summa:* ${amountDisplay} UZS
+🧾 *So'rov ID:* \`${paymentRequestId || '-'}\`
 📅 *Sana:* ${dateDisplay}
 
 ✅ *Foydalanuvchi to'lovni tasdiqladi*`;
         }
 
-        // Send Telegram notification (non-blocking with timeout)
-        const sendTelegramNotification = async () => {
+        // Send Telegram notification with explicit Telegram API result checks
+        const sendTelegramNotification = async (): Promise<{ ok: boolean; error?: string }> => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
@@ -102,43 +124,88 @@ export async function POST(request: NextRequest) {
                     telegramFormData.append('chat_id', paymentsChatId);
                     telegramFormData.append('caption', message);
                     telegramFormData.append('parse_mode', 'Markdown');
+                    if (paymentActionsMarkup) {
+                        telegramFormData.append('reply_markup', JSON.stringify(paymentActionsMarkup));
+                    }
 
+                    let mediaResponse: Response;
                     if (file.type.startsWith('image/')) {
                         telegramFormData.append('photo', blob, file.name);
-                        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                        mediaResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
                             method: 'POST',
                             body: telegramFormData,
                             signal: controller.signal
                         });
                     } else {
                         telegramFormData.append('document', blob, file.name);
-                        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+                        mediaResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
                             method: 'POST',
                             body: telegramFormData,
                             signal: controller.signal
                         });
                     }
+
+                    const mediaJson = await mediaResponse.json().catch(() => null);
+                    if (mediaResponse.ok && mediaJson?.ok) {
+                        return { ok: true };
+                    }
+
+                    // If media upload failed, fallback to text message so admin still gets deposit alert.
+                    const textFallbackResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: paymentsChatId,
+                            text: `${message}\n\n⚠️ Chek faylini yuborib bo'lmadi`,
+                            parse_mode: 'Markdown',
+                            ...(paymentActionsMarkup ? { reply_markup: paymentActionsMarkup } : {})
+                        }),
+                        signal: controller.signal
+                    });
+
+                    const textFallbackJson = await textFallbackResponse.json().catch(() => null);
+                    if (textFallbackResponse.ok && textFallbackJson?.ok) {
+                        return { ok: true };
+                    }
+
+                    console.error('Telegram media and fallback text failed:', {
+                        media: mediaJson,
+                        fallback: textFallbackJson
+                    });
+                    return { ok: false, error: textFallbackJson?.description || mediaJson?.description || 'Telegram send failed' };
                 } else {
-                    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             chat_id: paymentsChatId,
                             text: message,
-                            parse_mode: 'Markdown'
+                            parse_mode: 'Markdown',
+                            ...(paymentActionsMarkup ? { reply_markup: paymentActionsMarkup } : {})
                         }),
                         signal: controller.signal
                     });
+
+                    const json = await response.json().catch(() => null);
+                    if (!response.ok || !json?.ok) {
+                        console.error('Telegram text send failed:', json);
+                        return { ok: false, error: json?.description || 'Telegram send failed' };
+                    }
+
+                    return { ok: true };
                 }
             } catch (err) {
                 console.error('Telegram notification error:', err);
+                return { ok: false, error: 'Telegram notification error' };
             } finally {
                 clearTimeout(timeoutId);
             }
         };
 
-        // Fire and forget - don't block the response
-        sendTelegramNotification().catch(err => console.error('Telegram send failed:', err));
+        const telegramResult = await sendTelegramNotification();
+        if (!telegramResult.ok) {
+            return NextResponse.json({ error: telegramResult.error || 'Failed to send Telegram notification' }, { status: 500 });
+        }
 
         return NextResponse.json({ success: true });
     } catch (error) {

@@ -590,15 +590,23 @@ export default function AviatorGamePage() {
                 formData.append('file', uploadedFile);
             }
 
-            await fetch('/api/telegram/payment', {
+            const response = await fetch('/api/telegram/payment', {
                 method: 'POST',
                 body: formData
             });
+
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.error || 'Telegramga yuborishda xatolik');
+            }
 
             setShowSuccessModal(true);
             closeDepositModal();
         } catch (err) {
             console.error('Error confirming payment:', err);
+            const message = err instanceof Error ? err.message : "Xatolik yuz berdi. Qayta urinib ko'ring.";
+            setErrorMessage(message);
+            setShowErrorModal(true);
             closeDepositModal();
         }
     };

@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { checkAdminByAuthId } from '@/lib/adminCheck';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { rejectPaymentRequest } from '@/lib/paymentActions';
 
 export async function POST(request: NextRequest) {
     try {
@@ -22,20 +17,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Payment ID required' }, { status: 400 });
         }
 
-        // Update payment status to cancelled
-        const { error: updateError } = await supabase
-            .from('payment_requests')
-            .update({ status: 'cancelled' })
-            .eq('id', paymentId);
-
-        if (updateError) {
-            console.error('Error updating payment:', updateError);
-            return NextResponse.json({ error: 'Failed to reject payment' }, { status: 500 });
+        const result = await rejectPaymentRequest(paymentId);
+        if (!result.ok) {
+            return NextResponse.json({ error: result.error }, { status: result.statusCode });
         }
 
         return NextResponse.json({
             success: true,
-            message: 'Payment rejected'
+            message: result.state === 'already_cancelled' ? 'Payment already rejected' : 'Payment rejected',
+            alreadyProcessed: result.state === 'already_cancelled'
         });
     } catch (error) {
         console.error('Error:', error);
