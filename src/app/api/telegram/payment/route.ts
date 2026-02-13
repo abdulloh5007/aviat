@@ -19,6 +19,20 @@ type PaymentRequestRow = {
     expires_at: string;
 };
 
+const MAX_PAYMENT_PROOF_SIZE_BYTES = 20 * 1024 * 1024;
+const TELEGRAM_REQUEST_TIMEOUT_MS = 45_000;
+
+const isRequestBodyTooLargeError = (error: unknown): boolean => {
+    if (!(error instanceof Error)) return false;
+    const message = error.message.toLowerCase();
+    return (
+        message.includes('body exceeded') ||
+        message.includes('request entity too large') ||
+        message.includes('payload too large') ||
+        message.includes('size limit')
+    );
+};
+
 export async function POST(request: NextRequest) {
     try {
         const contentType = request.headers.get('content-type') || '';
@@ -34,7 +48,18 @@ export async function POST(request: NextRequest) {
 
         // Handle both FormData and JSON
         if (contentType.includes('multipart/form-data')) {
-            const formData = await request.formData();
+            let formData: FormData;
+            try {
+                formData = await request.formData();
+            } catch (error) {
+                if (isRequestBodyTooLargeError(error)) {
+                    return NextResponse.json({
+                        error: "Fayl hajmi server limitidan oshdi (payload too large)"
+                    }, { status: 413 });
+                }
+                throw error;
+            }
+
             userId = formData.get('userId') as string || '';
             method = formData.get('method') as string || '';
             amount = formData.get('amount') as string || '';
@@ -49,6 +74,19 @@ export async function POST(request: NextRequest) {
             cardNumber = json.cardNumber || '';
             cardExpiry = json.cardExpiry || '';
             paymentRequestId = json.paymentRequestId || '';
+        }
+
+        if (file && file.size > MAX_PAYMENT_PROOF_SIZE_BYTES) {
+            return NextResponse.json({
+                error: `Fayl hajmi juda katta. Maksimal ${Math.floor(MAX_PAYMENT_PROOF_SIZE_BYTES / (1024 * 1024))} MB`
+            }, { status: 413 });
+        }
+        if (file && file.size >= 1024 * 1024) {
+            console.info('Large payment proof upload received', {
+                name: file.name,
+                type: file.type,
+                sizeBytes: file.size
+            });
         }
 
         const isDepositRequest = type !== 'withdraw';
@@ -200,13 +238,11 @@ export async function POST(request: NextRequest) {
                 inline_keyboard: [[
                     {
                         text: '✅ Qabul qilish',
-                        callback_data: `payment:approve:${paymentRequestId}`,
-                        style: 'success'
+                        callback_data: `payment:approve:${paymentRequestId}`
                     },
                     {
                         text: '❌ Rad etish',
-                        callback_data: `payment:reject:${paymentRequestId}`,
-                        style: 'danger'
+                        callback_data: `payment:reject:${paymentRequestId}`
                     }
                 ]]
             }
@@ -237,7 +273,14 @@ export async function POST(request: NextRequest) {
         // Send Telegram notification with explicit Telegram API result checks
         const sendTelegramNotification = async (): Promise<{ ok: boolean; error?: string }> => {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+            const timeoutId = setTimeout(() => controller.abort(), TELEGRAM_REQUEST_TIMEOUT_MS);
+            const parseTelegramJson = (rawText: string) => {
+                try {
+                    return rawText ? JSON.parse(rawText) : null;
+                } catch {
+                    return null;
+                }
+            };
 
             try {
                 if (file) {
@@ -269,7 +312,8 @@ export async function POST(request: NextRequest) {
                         });
                     }
 
-                    const mediaJson = await mediaResponse.json().catch(() => null);
+                    const mediaRaw = await mediaResponse.text().catch(() => '');
+                    const mediaJson = parseTelegramJson(mediaRaw);
                     if (mediaResponse.ok && mediaJson?.ok) {
                         return { ok: true };
                     }
@@ -287,16 +331,22 @@ export async function POST(request: NextRequest) {
                         signal: controller.signal
                     });
 
-                    const textFallbackJson = await textFallbackResponse.json().catch(() => null);
+                    const textFallbackRaw = await textFallbackResponse.text().catch(() => '');
+                    const textFallbackJson = parseTelegramJson(textFallbackRaw);
                     if (textFallbackResponse.ok && textFallbackJson?.ok) {
                         return { ok: true };
                     }
 
                     console.error('Telegram media and fallback text failed:', {
-                        media: mediaJson,
-                        fallback: textFallbackJson
+                        mediaStatus: mediaResponse.status,
+                        media: mediaJson || mediaRaw,
+                        fallbackStatus: textFallbackResponse.status,
+                        fallback: textFallbackJson || textFallbackRaw
                     });
-                    return { ok: false, error: textFallbackJson?.description || mediaJson?.description || 'Telegram send failed' };
+                    return {
+                        ok: false,
+                        error: textFallbackJson?.description || mediaJson?.description || `Telegram send failed (HTTP ${mediaResponse.status})`
+                    };
                 } else {
                     const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                         method: 'POST',
@@ -310,17 +360,31 @@ export async function POST(request: NextRequest) {
                         signal: controller.signal
                     });
 
-                    const json = await response.json().catch(() => null);
+                    const responseRaw = await response.text().catch(() => '');
+                    const json = parseTelegramJson(responseRaw);
                     if (!response.ok || !json?.ok) {
-                        console.error('Telegram text send failed:', json);
-                        return { ok: false, error: json?.description || 'Telegram send failed' };
+                        console.error('Telegram text send failed:', {
+                            status: response.status,
+                            body: json || responseRaw
+                        });
+                        return { ok: false, error: json?.description || `Telegram send failed (HTTP ${response.status})` };
                     }
 
                     return { ok: true };
                 }
             } catch (err) {
+                if (err instanceof Error && err.name === 'AbortError') {
+                    console.error('Telegram notification timeout', {
+                        timeoutMs: TELEGRAM_REQUEST_TIMEOUT_MS,
+                        fileSizeBytes: file?.size || 0
+                    });
+                    return {
+                        ok: false,
+                        error: `Telegram javobi kechikdi (${Math.floor(TELEGRAM_REQUEST_TIMEOUT_MS / 1000)}s timeout)`
+                    };
+                }
                 console.error('Telegram notification error:', err);
-                return { ok: false, error: 'Telegram notification error' };
+                return { ok: false, error: err instanceof Error ? err.message : 'Telegram notification error' };
             } finally {
                 clearTimeout(timeoutId);
             }

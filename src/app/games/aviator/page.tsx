@@ -605,9 +605,31 @@ export default function AviatorGamePage() {
                 body: formData
             });
 
-            const result = await response.json().catch(() => ({}));
+            const rawResponseText = await response.text();
+            let result: any = {};
+            try {
+                result = rawResponseText ? JSON.parse(rawResponseText) : {};
+            } catch {
+                result = {};
+            }
+
             if (!response.ok || !result?.success) {
-                throw new Error(result?.error || 'Telegramga yuborishda xatolik');
+                if (response.status === 413) {
+                    throw new Error("Fayl juda katta: server limiti oshib ketdi (413). Admin bilan bog'laning.");
+                }
+
+                const isHtmlErrorPage = rawResponseText.trim().startsWith('<');
+                if (isHtmlErrorPage && (response.status === 502 || response.status === 503 || response.status === 504)) {
+                    throw new Error(
+                        `Server/proxy xatosi (HTTP ${response.status}). Odatda bu nginx proxy yoki upstream timeout muammosi.`
+                    );
+                }
+
+                const fallbackText = rawResponseText && !rawResponseText.trim().startsWith('<')
+                    ? rawResponseText.trim()
+                    : '';
+
+                throw new Error(result?.error || fallbackText || `Telegramga yuborishda xatolik (HTTP ${response.status})`);
             }
 
             const nextExpiresAt = typeof result?.expiresAt === 'string' ? result.expiresAt : currentPaymentRequest.expires_at;
