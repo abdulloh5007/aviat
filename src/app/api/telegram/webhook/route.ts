@@ -60,6 +60,50 @@ async function clearInlineButtons(chatId: string | number, messageId: number) {
     }
 }
 
+async function markPaymentMessageProcessed(message: any, statusLine: string) {
+    if (!BOT_TOKEN || !message?.chat?.id || !message?.message_id) return;
+
+    const chatId = message.chat.id;
+    const messageId = message.message_id;
+
+    try {
+        if (typeof message.caption === 'string') {
+            const nextCaption = message.caption.includes(statusLine)
+                ? message.caption
+                : `${message.caption}\n\n${statusLine}`;
+
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    message_id: messageId,
+                    caption: nextCaption
+                })
+            });
+            return;
+        }
+
+        if (typeof message.text === 'string') {
+            const nextText = message.text.includes(statusLine)
+                ? message.text
+                : `${message.text}\n\n${statusLine}`;
+
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    message_id: messageId,
+                    text: nextText
+                })
+            });
+        }
+    } catch (e) {
+        console.error('Error marking payment message status:', e);
+    }
+}
+
 function parsePaymentCallbackData(data: string | undefined): { action: 'approve' | 'reject'; paymentId: string } | null {
     if (!data || !data.startsWith(PAYMENT_CALLBACK_PREFIX)) {
         return null;
@@ -80,10 +124,6 @@ function parsePaymentCallbackData(data: string | undefined): { action: 'approve'
     return { action, paymentId };
 }
 
-function formatAmount(amount: number): string {
-    return Number(amount || 0).toLocaleString('uz-UZ');
-}
-
 async function handlePaymentCallback(update: any) {
     const callback = update.callback_query;
     if (!callback) return;
@@ -98,7 +138,7 @@ async function handlePaymentCallback(update: any) {
     const callbackUserId = callback.from?.id?.toString();
     const isAllowedAdmin = await isAllowedTelegramAdmin(callbackUserId);
     if (!isAllowedAdmin) {
-        await answerCallbackQuery(callbackId, 'Ruxsat yo\'q', true);
+        await answerCallbackQuery(callbackId, 'Нет прав', true);
         return;
     }
 
@@ -118,18 +158,15 @@ async function handlePaymentCallback(update: any) {
             return;
         }
 
-        const statusLabel = result.state === 'already_completed' ? 'oldin tasdiqlangan' : 'tasdiqlandi';
-        const summary = `✅ To'lov ${statusLabel}
-🧾 So'rov ID: ${result.paymentId}
-👤 User ID: ${result.profileUserId}
-💵 Summa: ${formatAmount(result.amount)} UZS
-💰 Balans: ${formatAmount(result.newBalance)} UZS`;
+        const processedLine = result.state === 'already_completed'
+            ? '✅ Статус: Уже принято'
+            : '✅ Статус: Принято';
 
-        await answerCallbackQuery(callbackId, 'To\'lov tasdiqlandi');
+        await answerCallbackQuery(callbackId, 'Принято');
 
         if (messageChatId && messageId) {
             await clearInlineButtons(messageChatId, messageId);
-            await sendMessage(messageChatId, summary);
+            await markPaymentMessageProcessed(callback.message, processedLine);
         }
         return;
     }
@@ -140,17 +177,15 @@ async function handlePaymentCallback(update: any) {
         return;
     }
 
-    const statusLabel = result.state === 'already_cancelled' ? 'oldin rad etilgan' : 'rad etildi';
-    const summary = `❌ To'lov ${statusLabel}
-🧾 So'rov ID: ${result.paymentId}
-👤 User ID: ${result.profileUserId}
-💵 Summa: ${formatAmount(result.amount)} UZS`;
+    const processedLine = result.state === 'already_cancelled'
+        ? '❌ Статус: Уже отклонено'
+        : '❌ Статус: Отклонено';
 
-    await answerCallbackQuery(callbackId, 'To\'lov rad etildi');
+    await answerCallbackQuery(callbackId, 'Отклонено');
 
     if (messageChatId && messageId) {
         await clearInlineButtons(messageChatId, messageId);
-        await sendMessage(messageChatId, summary);
+        await markPaymentMessageProcessed(callback.message, processedLine);
     }
 }
 
