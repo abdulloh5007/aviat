@@ -19,7 +19,7 @@ interface PaymentRequest {
     method: string;
     amount: number;
     card_number: string;
-    status: 'pending' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled';
+    status: 'pending' | 'awaiting_review' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled';
     created_at: string;
     expires_at: string;
     screenshot_url?: string;
@@ -74,6 +74,7 @@ const formatDate = (dateStr: string): string => {
 const getStatusColor = (status: string) => {
     switch (status) {
         case 'pending': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+        case 'awaiting_review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
         case 'awaiting_confirmation': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
         case 'completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
         case 'cancelled': return 'bg-red-500/20 text-red-400 border-red-500/30';
@@ -85,6 +86,7 @@ const getStatusColor = (status: string) => {
 const getStatusLabel = (status: string) => {
     switch (status) {
         case 'pending': return 'Kutilmoqda';
+        case 'awaiting_review': return 'Tasdiqlash kutilmoqda';
         case 'awaiting_confirmation': return 'Tasdiqlash kutilmoqda';
         case 'completed': return 'Tasdiqlangan';
         case 'cancelled': return 'Rad etilgan';
@@ -382,7 +384,7 @@ export default function AdminPage() {
 
     const filteredPayments = payments.filter(p => {
         if (filter === 'all') return true;
-        if (filter === 'pending') return p.status === 'pending' || p.status === 'awaiting_confirmation';
+        if (filter === 'pending') return p.status === 'pending' || p.status === 'awaiting_confirmation' || p.status === 'awaiting_review';
         return p.status === filter;
     });
 
@@ -413,7 +415,7 @@ export default function AdminPage() {
                     >
                         <ArrowDownCircle className="w-5 h-5" />
                         <span>Pul kiritish</span>
-                        {payments.filter(p => p.status === 'pending' || p.status === 'awaiting_confirmation').length > 0 && (
+                        {payments.filter(p => p.status === 'pending' || p.status === 'awaiting_confirmation' || p.status === 'awaiting_review').length > 0 && (
                             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-400 rounded-full" />
                         )}
                     </button>

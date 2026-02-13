@@ -15,7 +15,7 @@ type PaymentRequestRow = {
     method: string;
     amount: number;
     card_number: string;
-    status: 'pending' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled' | string;
+    status: 'pending' | 'awaiting_review' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled' | string;
     expires_at: string;
 };
 
@@ -89,12 +89,12 @@ export async function POST(request: NextRequest) {
                 }, { status: 409 });
             }
 
-            if (paymentRequest.status === 'awaiting_confirmation') {
+            if (paymentRequest.status === 'awaiting_confirmation' || paymentRequest.status === 'awaiting_review') {
                 alreadySubmitted = true;
             } else if (paymentRequest.status === 'pending') {
                 const { data: lockedRows, error: lockError } = await supabase
                     .from('payment_requests')
-                    .update({ status: 'awaiting_confirmation' })
+                    .update({ status: 'awaiting_review' })
                     .eq('id', paymentRequest.id)
                     .eq('status', 'pending')
                     .gt('expires_at', nowIso)
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
                         }, { status: 409 });
                     }
 
-                    if (paymentRequest.status === 'awaiting_confirmation') {
+                    if (paymentRequest.status === 'awaiting_confirmation' || paymentRequest.status === 'awaiting_review') {
                         alreadySubmitted = true;
                     } else {
                         return NextResponse.json({
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({
                 success: true,
                 alreadySubmitted: true,
-                status: paymentRequest?.status || 'awaiting_confirmation',
+                status: paymentRequest?.status || 'awaiting_review',
                 expiresAt: paymentRequest?.expires_at || null
             });
         }
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
                     .from('payment_requests')
                     .update({ status: 'pending' })
                     .eq('id', paymentRequest.id)
-                    .eq('status', 'awaiting_confirmation');
+                    .in('status', ['awaiting_review', 'awaiting_confirmation']);
             }
             console.error('Telegram credentials not configured');
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
@@ -333,14 +333,14 @@ export async function POST(request: NextRequest) {
                     .from('payment_requests')
                     .update({ status: 'pending' })
                     .eq('id', paymentRequest.id)
-                    .eq('status', 'awaiting_confirmation');
+                    .in('status', ['awaiting_review', 'awaiting_confirmation']);
             }
             return NextResponse.json({ error: telegramResult.error || 'Failed to send Telegram notification' }, { status: 500 });
         }
 
         return NextResponse.json({
             success: true,
-            status: paymentRequest?.status || (isDepositRequest ? 'awaiting_confirmation' : 'sent'),
+            status: paymentRequest?.status || (isDepositRequest ? 'awaiting_review' : 'sent'),
             expiresAt: paymentRequest?.expires_at || null
         });
     } catch (error) {

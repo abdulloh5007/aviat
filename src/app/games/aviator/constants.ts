@@ -41,7 +41,7 @@ export interface PaymentRequest {
     method: string;
     amount: number;
     card_number: string;
-    status: 'pending' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled';
+    status: 'pending' | 'awaiting_review' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled';
     expires_at: string;
     created_at: string;
 }

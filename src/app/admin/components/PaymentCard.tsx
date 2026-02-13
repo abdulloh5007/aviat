@@ -70,7 +70,7 @@ export const PaymentCard = ({
                         <span className="text-gray-400 text-sm">Chekni ko'rish</span>
                     </button>
                 )}
-                {(payment.status === 'pending' || payment.status === 'awaiting_confirmation') && (
+                {(payment.status === 'pending' || payment.status === 'awaiting_confirmation' || payment.status === 'awaiting_review') && (
                     <div className="flex gap-2 pt-2">
                         <button
                             onClick={() => onApprove(payment.id)}

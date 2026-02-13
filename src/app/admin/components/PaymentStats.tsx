@@ -1,7 +1,7 @@
 import { Clock, CreditCard, Check, X } from 'lucide-react';
 
 interface PaymentRequest {
-    status: 'pending' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled';
+    status: 'pending' | 'awaiting_review' | 'awaiting_confirmation' | 'completed' | 'expired' | 'cancelled';
     amount: number;
 }
 
@@ -11,8 +11,8 @@ interface PaymentStatsProps {
 }
 
 export const PaymentStats = ({ payments, formatAmount }: PaymentStatsProps) => {
-    const pendingCount = payments.filter(p => p.status === 'pending' || p.status === 'awaiting_confirmation').length;
-    const totalPending = payments.filter(p => p.status === 'pending' || p.status === 'awaiting_confirmation').reduce((sum, p) => sum + p.amount, 0);
+    const pendingCount = payments.filter(p => p.status === 'pending' || p.status === 'awaiting_confirmation' || p.status === 'awaiting_review').length;
+    const totalPending = payments.filter(p => p.status === 'pending' || p.status === 'awaiting_confirmation' || p.status === 'awaiting_review').reduce((sum, p) => sum + p.amount, 0);
 
     return (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

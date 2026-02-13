@@ -5,7 +5,7 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const PENDING_STATUSES = ['pending', 'awaiting_confirmation'];
+const PENDING_STATUSES = ['pending', 'awaiting_review', 'awaiting_confirmation'];
 const APPROVED_STATUSES = ['completed', 'approved'];
 const REJECTED_STATUSES = ['cancelled', 'rejected', 'expired'];
 

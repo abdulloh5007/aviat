@@ -525,7 +525,7 @@ export default function AviatorGamePage() {
                 .from('payment_requests')
                 .select('*')
                 .eq('user_id', user?.id)
-                .in('status', ['pending', 'awaiting_confirmation'])
+                .in('status', ['pending', 'awaiting_review', 'awaiting_confirmation'])
                 .gt('expires_at', new Date().toISOString())
                 .order('created_at', { ascending: false })
                 .limit(1);
@@ -585,7 +585,7 @@ export default function AviatorGamePage() {
     // Confirm payment and send to Telegram
     const confirmPayment = async () => {
         if (!currentPaymentRequest || !selectedPayment || isSubmittingPayment) return;
-        if (currentPaymentRequest.status === 'awaiting_confirmation') {
+        if (currentPaymentRequest.status === 'awaiting_confirmation' || currentPaymentRequest.status === 'awaiting_review') {
             return;
         }
 
@@ -612,7 +612,7 @@ export default function AviatorGamePage() {
 
             const nextExpiresAt = typeof result?.expiresAt === 'string' ? result.expiresAt : currentPaymentRequest.expires_at;
             const nextRemaining = Math.max(0, Math.floor((new Date(nextExpiresAt).getTime() - Date.now()) / 1000));
-            setCurrentPaymentRequest(prev => prev ? { ...prev, status: 'awaiting_confirmation', expires_at: nextExpiresAt } : prev);
+            setCurrentPaymentRequest(prev => prev ? { ...prev, status: 'awaiting_review', expires_at: nextExpiresAt } : prev);
             setTimeRemaining(nextRemaining);
             setShowSuccessModal(true);
             closeDepositModal();
@@ -645,7 +645,9 @@ export default function AviatorGamePage() {
         );
     }
 
-    const isAwaitingReview = currentPaymentRequest?.status === 'awaiting_confirmation';
+    const isAwaitingReview =
+        currentPaymentRequest?.status === 'awaiting_confirmation' ||
+        currentPaymentRequest?.status === 'awaiting_review';
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-[#181818] to-[#010101] flex flex-col">
