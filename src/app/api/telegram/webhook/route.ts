@@ -17,6 +17,10 @@ type TelegramApiResult = {
     description?: string;
 };
 
+const APPROVED_PAYMENT_STATUSES = new Set(['completed', 'approved']);
+const REJECTED_PAYMENT_STATUSES = new Set(['cancelled', 'rejected']);
+const EXPIRED_PAYMENT_STATUSES = new Set(['expired']);
+
 async function callTelegramApi(method: string, payload: Record<string, unknown>): Promise<TelegramApiResult> {
     if (!BOT_TOKEN) {
         return { ok: false, description: 'BOT_TOKEN not configured' };
@@ -118,6 +122,51 @@ async function markPaymentMessageProcessed(message: any, statusLine: string): Pr
     }
 }
 
+async function getPaymentRequestStatus(paymentId: string): Promise<string | null> {
+    if (!paymentId) {
+        return null;
+    }
+
+    const { data, error } = await supabase
+        .from('payment_requests')
+        .select('status')
+        .eq('id', paymentId)
+        .maybeSingle();
+
+    if (error || !data?.status) {
+        return null;
+    }
+
+    return String(data.status);
+}
+
+function getProcessedStatePresentation(status: string): { callbackText: string; statusLine: string } | null {
+    const normalized = status.toLowerCase();
+
+    if (APPROVED_PAYMENT_STATUSES.has(normalized)) {
+        return {
+            callbackText: 'Уже принято',
+            statusLine: '✅ Статус: Уже принято'
+        };
+    }
+
+    if (REJECTED_PAYMENT_STATUSES.has(normalized)) {
+        return {
+            callbackText: 'Уже отклонено',
+            statusLine: '❌ Статус: Уже отклонено'
+        };
+    }
+
+    if (EXPIRED_PAYMENT_STATUSES.has(normalized)) {
+        return {
+            callbackText: 'Срок запроса истек',
+            statusLine: '⌛ Статус: Истекло'
+        };
+    }
+
+    return null;
+}
+
 function parsePaymentCallbackData(data: string | undefined): { action: 'approve' | 'reject'; paymentId: string } | null {
     if (!data) {
         return null;
@@ -192,12 +241,6 @@ async function handlePaymentCallback(update: any) {
         return;
     }
 
-    // Acknowledge quickly to avoid Telegram BOT_RESPONSE_TIMEOUT on slower DB calls.
-    const acknowledged = await answerCallbackQuery(callbackId, 'Обрабатываю...');
-    if (!acknowledged) {
-        console.warn('Failed to answer callback query in time', { callbackId });
-    }
-
     const configuredPaymentsChatId = await getTelegramChatId('payments');
     const callbackChatId = callback.message?.chat?.id?.toString();
     if (configuredPaymentsChatId && callbackChatId && configuredPaymentsChatId !== callbackChatId) {
@@ -208,9 +251,54 @@ async function handlePaymentCallback(update: any) {
 
     const messageChatId = callback.message?.chat?.id;
     const messageId = callback.message?.message_id;
+
+    const syncMessageState = async (statusLine: string) => {
+        if (!messageChatId || !messageId) return;
+
+        const buttonsCleared = await clearInlineButtons(messageChatId, messageId);
+        const statusMarked = await markPaymentMessageProcessed(callback.message, statusLine);
+        if (!buttonsCleared || !statusMarked) {
+            await sendMessage(messageChatId, statusLine);
+        }
+    };
+
+    const currentStatus = await getPaymentRequestStatus(callbackData.paymentId);
+    const alreadyProcessedState = currentStatus ? getProcessedStatePresentation(currentStatus) : null;
+    if (alreadyProcessedState) {
+        await answerCallbackQuery(callbackId, alreadyProcessedState.callbackText, true);
+        await syncMessageState(alreadyProcessedState.statusLine);
+        console.info('Payment callback ignored because request already processed', {
+            paymentId: callbackData.paymentId,
+            currentStatus
+        });
+        return;
+    }
+
+    // Acknowledge quickly to avoid Telegram BOT_RESPONSE_TIMEOUT on slower DB calls.
+    const acknowledged = await answerCallbackQuery(callbackId, 'Обрабатываю...');
+    if (!acknowledged) {
+        console.warn('Failed to answer callback query in time', { callbackId });
+    }
+
     if (callbackData.action === 'approve') {
         const result = await approvePaymentRequest(callbackData.paymentId);
         if (!result.ok) {
+            if (result.statusCode === 409) {
+                const latestStatus = await getPaymentRequestStatus(callbackData.paymentId);
+                const processedState = latestStatus ? getProcessedStatePresentation(latestStatus) : null;
+                if (processedState) {
+                    await syncMessageState(processedState.statusLine);
+                    if (messageChatId) {
+                        await sendMessage(messageChatId, processedState.callbackText);
+                    }
+                    console.info('Approve callback resolved as already processed after conflict', {
+                        paymentId: callbackData.paymentId,
+                        latestStatus
+                    });
+                    return;
+                }
+            }
+
             if (messageChatId) {
                 await sendMessage(messageChatId, `❌ ${result.error}`);
             }
@@ -225,13 +313,7 @@ async function handlePaymentCallback(update: any) {
             ? '✅ Статус: Уже принято'
             : '✅ Статус: Принято';
 
-        if (messageChatId && messageId) {
-            const buttonsCleared = await clearInlineButtons(messageChatId, messageId);
-            const statusMarked = await markPaymentMessageProcessed(callback.message, processedLine);
-            if (!buttonsCleared || !statusMarked) {
-                await sendMessage(messageChatId, processedLine);
-            }
-        }
+        await syncMessageState(processedLine);
         console.info('Approve payment callback succeeded', {
             paymentId: callbackData.paymentId,
             resultState: result.state
@@ -241,6 +323,22 @@ async function handlePaymentCallback(update: any) {
 
     const result = await rejectPaymentRequest(callbackData.paymentId);
     if (!result.ok) {
+        if (result.statusCode === 409) {
+            const latestStatus = await getPaymentRequestStatus(callbackData.paymentId);
+            const processedState = latestStatus ? getProcessedStatePresentation(latestStatus) : null;
+            if (processedState) {
+                await syncMessageState(processedState.statusLine);
+                if (messageChatId) {
+                    await sendMessage(messageChatId, processedState.callbackText);
+                }
+                console.info('Reject callback resolved as already processed after conflict', {
+                    paymentId: callbackData.paymentId,
+                    latestStatus
+                });
+                return;
+            }
+        }
+
         if (messageChatId) {
             await sendMessage(messageChatId, `❌ ${result.error}`);
         }
@@ -255,13 +353,7 @@ async function handlePaymentCallback(update: any) {
         ? '❌ Статус: Уже отклонено'
         : '❌ Статус: Отклонено';
 
-    if (messageChatId && messageId) {
-        const buttonsCleared = await clearInlineButtons(messageChatId, messageId);
-        const statusMarked = await markPaymentMessageProcessed(callback.message, processedLine);
-        if (!buttonsCleared || !statusMarked) {
-            await sendMessage(messageChatId, processedLine);
-        }
-    }
+    await syncMessageState(processedLine);
     console.info('Reject payment callback succeeded', {
         paymentId: callbackData.paymentId,
         resultState: result.state

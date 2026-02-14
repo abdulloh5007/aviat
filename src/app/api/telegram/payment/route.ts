@@ -33,6 +33,16 @@ const isRequestBodyTooLargeError = (error: unknown): boolean => {
     );
 };
 
+const isReplyMarkupStyleError = (description: string): boolean => {
+    const normalized = description.toLowerCase();
+    return (
+        normalized.includes('inline keyboard button') ||
+        normalized.includes('reply markup') ||
+        normalized.includes("can't parse") ||
+        normalized.includes('style')
+    );
+};
+
 export async function POST(request: NextRequest) {
     try {
         const contentType = request.headers.get('content-type') || '';
@@ -233,7 +243,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Telegram not configured' }, { status: 500 });
         }
 
-        const paymentActionsMarkup = hasActionButtons
+        const paymentActionsMarkupBase = hasActionButtons
             ? {
                 inline_keyboard: [[
                     {
@@ -243,6 +253,23 @@ export async function POST(request: NextRequest) {
                     {
                         text: '❌ Rad etish',
                         callback_data: `payment:reject:${paymentRequestId}`
+                    }
+                ]]
+            }
+            : undefined;
+
+        const paymentActionsMarkupStyled = hasActionButtons
+            ? {
+                inline_keyboard: [[
+                    {
+                        text: '✅ Qabul qilish',
+                        callback_data: `payment:approve:${paymentRequestId}`,
+                        style: 'success'
+                    },
+                    {
+                        text: '❌ Rad etish',
+                        callback_data: `payment:reject:${paymentRequestId}`,
+                        style: 'danger'
                     }
                 ]]
             }
@@ -281,58 +308,110 @@ export async function POST(request: NextRequest) {
                     return null;
                 }
             };
+            const sendTextMessage = async (text: string, replyMarkup?: Record<string, unknown>) => {
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: paymentsChatId,
+                        text,
+                        parse_mode: 'Markdown',
+                        ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+                    }),
+                    signal: controller.signal
+                });
+
+                const responseRaw = await response.text().catch(() => '');
+                const json = parseTelegramJson(responseRaw);
+                return { response, responseRaw, json };
+            };
+            const sendMediaMessage = async (
+                fileBlob: Blob,
+                fileName: string,
+                mimeType: string,
+                replyMarkup?: Record<string, unknown>
+            ) => {
+                const telegramFormData = new FormData();
+                telegramFormData.append('chat_id', paymentsChatId);
+                telegramFormData.append('caption', message);
+                telegramFormData.append('parse_mode', 'Markdown');
+                if (replyMarkup) {
+                    telegramFormData.append('reply_markup', JSON.stringify(replyMarkup));
+                }
+
+                let mediaResponse: Response;
+                if (mimeType.startsWith('image/')) {
+                    telegramFormData.append('photo', fileBlob, fileName);
+                    mediaResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                        method: 'POST',
+                        body: telegramFormData,
+                        signal: controller.signal
+                    });
+                } else {
+                    telegramFormData.append('document', fileBlob, fileName);
+                    mediaResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+                        method: 'POST',
+                        body: telegramFormData,
+                        signal: controller.signal
+                    });
+                }
+
+                const mediaRaw = await mediaResponse.text().catch(() => '');
+                const mediaJson = parseTelegramJson(mediaRaw);
+                return { mediaResponse, mediaRaw, mediaJson };
+            };
+            const shouldRetryWithoutStyle = (status: number, description?: string) => {
+                if (!hasActionButtons || !paymentActionsMarkupStyled || !paymentActionsMarkupBase) return false;
+                if (status < 400) return false;
+                return isReplyMarkupStyleError(description || '');
+            };
 
             try {
                 if (file) {
                     const fileBuffer = await file.arrayBuffer();
                     const blob = new Blob([fileBuffer], { type: file.type });
+                    const currentFileName = file.name;
+                    const currentFileType = file.type;
 
-                    const telegramFormData = new FormData();
-                    telegramFormData.append('chat_id', paymentsChatId);
-                    telegramFormData.append('caption', message);
-                    telegramFormData.append('parse_mode', 'Markdown');
-                    if (paymentActionsMarkup) {
-                        telegramFormData.append('reply_markup', JSON.stringify(paymentActionsMarkup));
-                    }
-
-                    let mediaResponse: Response;
-                    if (file.type.startsWith('image/')) {
-                        telegramFormData.append('photo', blob, file.name);
-                        mediaResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-                            method: 'POST',
-                            body: telegramFormData,
-                            signal: controller.signal
-                        });
-                    } else {
-                        telegramFormData.append('document', blob, file.name);
-                        mediaResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
-                            method: 'POST',
-                            body: telegramFormData,
-                            signal: controller.signal
-                        });
-                    }
-
-                    const mediaRaw = await mediaResponse.text().catch(() => '');
-                    const mediaJson = parseTelegramJson(mediaRaw);
+                    let { mediaResponse, mediaRaw, mediaJson } = await sendMediaMessage(
+                        blob,
+                        currentFileName,
+                        currentFileType,
+                        paymentActionsMarkupStyled
+                    );
                     if (mediaResponse.ok && mediaJson?.ok) {
                         return { ok: true };
                     }
 
-                    // If media upload failed, fallback to text message so admin still gets deposit alert.
-                    const textFallbackResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            chat_id: paymentsChatId,
-                            text: `${message}\n\n⚠️ Chek faylini yuborib bo'lmadi`,
-                            parse_mode: 'Markdown',
-                            ...(paymentActionsMarkup ? { reply_markup: paymentActionsMarkup } : {})
-                        }),
-                        signal: controller.signal
-                    });
+                    if (shouldRetryWithoutStyle(mediaResponse.status, mediaJson?.description || mediaRaw)) {
+                        console.warn('Retrying Telegram media send without button style');
+                        const retried = await sendMediaMessage(blob, currentFileName, currentFileType, paymentActionsMarkupBase);
+                        mediaResponse = retried.mediaResponse;
+                        mediaRaw = retried.mediaRaw;
+                        mediaJson = retried.mediaJson;
+                        if (mediaResponse.ok && mediaJson?.ok) {
+                            return { ok: true };
+                        }
+                    }
 
-                    const textFallbackRaw = await textFallbackResponse.text().catch(() => '');
-                    const textFallbackJson = parseTelegramJson(textFallbackRaw);
+                    // If media upload failed, fallback to text message so admin still gets deposit alert.
+                    let { response: textFallbackResponse, responseRaw: textFallbackRaw, json: textFallbackJson } = await sendTextMessage(
+                        `${message}\n\n⚠️ Chek faylini yuborib bo'lmadi`,
+                        paymentActionsMarkupStyled
+                    );
+                    if (!textFallbackResponse.ok || !textFallbackJson?.ok) {
+                        if (shouldRetryWithoutStyle(textFallbackResponse.status, textFallbackJson?.description || textFallbackRaw)) {
+                            console.warn('Retrying Telegram fallback text send without button style');
+                            const retriedText = await sendTextMessage(
+                                `${message}\n\n⚠️ Chek faylini yuborib bo'lmadi`,
+                                paymentActionsMarkupBase
+                            );
+                            textFallbackResponse = retriedText.response;
+                            textFallbackRaw = retriedText.responseRaw;
+                            textFallbackJson = retriedText.json;
+                        }
+                    }
+
                     if (textFallbackResponse.ok && textFallbackJson?.ok) {
                         return { ok: true };
                     }
@@ -348,20 +427,15 @@ export async function POST(request: NextRequest) {
                         error: textFallbackJson?.description || mediaJson?.description || `Telegram send failed (HTTP ${mediaResponse.status})`
                     };
                 } else {
-                    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            chat_id: paymentsChatId,
-                            text: message,
-                            parse_mode: 'Markdown',
-                            ...(paymentActionsMarkup ? { reply_markup: paymentActionsMarkup } : {})
-                        }),
-                        signal: controller.signal
-                    });
+                    let { response, responseRaw, json } = await sendTextMessage(message, paymentActionsMarkupStyled);
+                    if ((!response.ok || !json?.ok) && shouldRetryWithoutStyle(response.status, json?.description || responseRaw)) {
+                        console.warn('Retrying Telegram text send without button style');
+                        const retriedText = await sendTextMessage(message, paymentActionsMarkupBase);
+                        response = retriedText.response;
+                        responseRaw = retriedText.responseRaw;
+                        json = retriedText.json;
+                    }
 
-                    const responseRaw = await response.text().catch(() => '');
-                    const json = parseTelegramJson(responseRaw);
                     if (!response.ok || !json?.ok) {
                         console.error('Telegram text send failed:', {
                             status: response.status,
