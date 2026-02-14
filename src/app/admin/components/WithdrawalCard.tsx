@@ -90,6 +90,7 @@ export const WithdrawalCard = ({
                 {withdrawal.status === 'pending' && (
                     <div className="flex gap-2 pt-2">
                         <button
+                            type="button"
                             onClick={() => onApprove(withdrawal.id)}
                             disabled={processingId === withdrawal.id}
                             className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-500 hover:bg-green-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
@@ -104,6 +105,7 @@ export const WithdrawalCard = ({
                             )}
                         </button>
                         <button
+                            type="button"
                             onClick={() => onReject(withdrawal.id)}
                             disabled={processingId === withdrawal.id}
                             className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl font-medium transition-colors"

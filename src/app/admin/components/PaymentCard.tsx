@@ -63,6 +63,7 @@ export const PaymentCard = ({
                 </div>
                 {payment.screenshot_url && (
                     <button
+                        type="button"
                         onClick={() => onViewScreenshot(payment.screenshot_url!)}
                         className="w-full flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
                     >
@@ -73,6 +74,7 @@ export const PaymentCard = ({
                 {(payment.status === 'pending' || payment.status === 'awaiting_confirmation' || payment.status === 'awaiting_review') && (
                     <div className="flex gap-2 pt-2">
                         <button
+                            type="button"
                             onClick={() => onApprove(payment.id)}
                             disabled={processingId === payment.id}
                             className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-500 hover:bg-green-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
@@ -87,6 +89,7 @@ export const PaymentCard = ({
                             )}
                         </button>
                         <button
+                            type="button"
                             onClick={() => onReject(payment.id)}
                             disabled={processingId === payment.id}
                             className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl font-medium transition-colors"

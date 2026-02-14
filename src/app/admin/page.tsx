@@ -130,9 +130,12 @@ export default function AdminPage() {
     const [settingsError, setSettingsError] = useState<string>('');
     const [settingsSuccess, setSettingsSuccess] = useState<string>('');
 
-    const fetchPayments = useCallback(async () => {
+    const fetchPayments = useCallback(async (options?: { silent?: boolean }) => {
         if (!user?.id) return;
-        setLoadingPayments(true);
+        const silent = options?.silent ?? false;
+        if (!silent) {
+            setLoadingPayments(true);
+        }
         try {
             const response = await fetch('/api/admin/payments', {
                 method: 'POST',
@@ -146,7 +149,9 @@ export default function AdminPage() {
         } catch (err) {
             console.error('Error fetching payments:', err);
         } finally {
-            setLoadingPayments(false);
+            if (!silent) {
+                setLoadingPayments(false);
+            }
         }
     }, [user?.id]);
 
@@ -243,6 +248,7 @@ export default function AdminPage() {
     const handleApprove = async (paymentId: string) => {
         if (!user?.id) return;
         setProcessingId(paymentId);
+        const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
         try {
             const response = await fetch('/api/admin/payments/approve', {
                 method: 'POST',
@@ -251,7 +257,10 @@ export default function AdminPage() {
             });
             const data = await response.json();
             if (data.success) {
-                fetchPayments();
+                await fetchPayments({ silent: true });
+                requestAnimationFrame(() => {
+                    window.scrollTo({ top: currentScrollY, behavior: 'auto' });
+                });
             }
         } catch (err) {
             console.error('Error approving:', err);
@@ -263,6 +272,7 @@ export default function AdminPage() {
     const handleReject = async (paymentId: string) => {
         if (!user?.id) return;
         setProcessingId(paymentId);
+        const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
         try {
             const response = await fetch('/api/admin/payments/reject', {
                 method: 'POST',
@@ -271,7 +281,10 @@ export default function AdminPage() {
             });
             const data = await response.json();
             if (data.success) {
-                fetchPayments();
+                await fetchPayments({ silent: true });
+                requestAnimationFrame(() => {
+                    window.scrollTo({ top: currentScrollY, behavior: 'auto' });
+                });
             }
         } catch (err) {
             console.error('Error rejecting:', err);
